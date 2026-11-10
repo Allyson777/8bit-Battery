@@ -278,11 +278,6 @@ namespace GameSirBatteryMonitor
             menu.MenuItems.Add("Vibrar Controle P1", (s, e) => Vibrate(0));
             menu.MenuItems.Add("Vibrar Controle P2", (s, e) => Vibrate(1));
             menu.MenuItems.Add("-");
-            menu.MenuItems.Add("Alternar Modo Carregando P1", (s, e) => ToggleCharging(0));
-            menu.MenuItems.Add("Alternar Modo Carregando P2", (s, e) => ToggleCharging(1));
-            menu.MenuItems.Add("Marcar P1 como 100% Carregado", (s, e) => SetBattery(0, 100));
-            menu.MenuItems.Add("Marcar P2 como 100% Carregado", (s, e) => SetBattery(1, 100));
-            menu.MenuItems.Add("-");
 
             _autoStartMenuItem = new MenuItem("Iniciar junto com o Windows", (s, e) =>
             {
@@ -777,29 +772,34 @@ namespace GameSirBatteryMonitor
                                 c.BatteryType = bat.BatteryType;
                                 c.BatteryLevel = bat.BatteryLevel;
 
-                                // If the controller was turned off (e.g. charging in a wall outlet) and when turned back on
-                                // its hardware voltage tier jumped UP (e.g. from Low/Medium < 3 to Full == 3), sync to 100%!
-                                if (justReconnected && prevHwLevel > 0 && prevHwLevel < 3 && bat.BatteryLevel == 3 && c.EstimatedPercent <= 68.0)
+                                // 1. Upward Hardware Voltage Sync (Recharged in wall outlet or USB while off):
+                                if (bat.BatteryLevel == 3 && c.EstimatedPercent <= 66.0 && (justReconnected || (prevHwLevel > 0 && prevHwLevel < 3)))
                                 {
                                     c.RemainingMah = ControllerStateData.BATTERY_CAPACITY_MAH;
                                     c.ActivePlaySeconds = 0;
                                     c.NotifiedLow15 = false;
                                     PushNotification("✅ CONTROLE P" + (i + 1) + " RECARREGADO (100%)",
-                                        "O Controle P" + (i + 1) + " voltou ligado com bateria cheia (carregado na tomada)!",
+                                        "O Controle P" + (i + 1) + " foi reconhecido com carga completa!",
                                         ToolTipIcon.Info);
                                 }
+                                else if (bat.BatteryLevel == 2 && c.EstimatedPercent <= 30.5 && (justReconnected || (prevHwLevel > 0 && prevHwLevel < 2)))
+                                {
+                                    c.EstimatedPercent = 65.0;
+                                    c.NotifiedLow15 = false;
+                                }
+                                // 2. Downward Hardware Voltage Sync (when physical voltage crosses into a lower band):
                                 else if (!c.IsCharging)
                                 {
-                                    if (bat.BatteryLevel == 2 && c.EstimatedPercent > 65) c.EstimatedPercent = 65;
-                                    else if (bat.BatteryLevel == 1 && c.EstimatedPercent > 30) c.EstimatedPercent = 30;
-                                    else if (bat.BatteryLevel == 0 && c.EstimatedPercent > 8) c.EstimatedPercent = 8;
+                                    if (bat.BatteryLevel == 2 && c.EstimatedPercent > 65.0) c.EstimatedPercent = 65.0;
+                                    else if (bat.BatteryLevel == 1 && c.EstimatedPercent > 30.0) c.EstimatedPercent = 30.0;
+                                    else if (bat.BatteryLevel == 0 && c.EstimatedPercent > 8.0) c.EstimatedPercent = 8.0;
                                 }
                             }
 
-                            // Handle USB-C Charging on PC
+                            // Handle USB-C Charging on PC (CC/CV Li-Ion 600 mAh curve)
                             if (c.IsCharging)
                             {
-                                double chargeMa = prevPct < 80.0 ? 300.0 : 180.0;
+                                double chargeMa = prevPct < 80.0 ? 300.0 : (prevPct < 92.0 ? 200.0 : 110.0);
                                 c.CurrentDrawMa = (int)Math.Round(chargeMa);
                                 c.ActivityState = "Carregando ⚡";
                                 c.ConnectionSubtitle = "Cabo USB-C · Slot XInput " + (hwSlot + 1);
@@ -851,27 +851,24 @@ namespace GameSirBatteryMonitor
                                 c.IdleSeconds += dt;
                             }
 
+                            // Telemetry-weighted real-time current draw (mA)
+                            double lMag = Math.Min(1.0, Math.Sqrt((double)st.sThumbLX * st.sThumbLX + (double)st.sThumbLY * st.sThumbLY) / 32767.0);
+                            double rMag = Math.Min(1.0, Math.Sqrt((double)st.sThumbRX * st.sThumbRX + (double)st.sThumbRY * st.sThumbRY) / 32767.0);
+                            double trigLoad = (st.bLeftTrigger + st.bRightTrigger) / 510.0;
+
                             string prevActivity = c.ActivityState;
                             double drawMa;
                             if (isVibrating)
                             {
-                                drawMa = 190.0;
+                                drawMa = 195.0;
                                 c.ActivityState = "Vibrando";
                                 c.ActivePlaySeconds += dt;
                             }
                             else if (c.IdleSeconds < 12.0)
                             {
                                 c.ActivePlaySeconds += dt;
-                                if (c.RecentActionScore > 38.0)
-                                {
-                                    drawMa = 92.0;
-                                    c.ActivityState = "Jogo Intenso";
-                                }
-                                else
-                                {
-                                    drawMa = 72.0;
-                                    c.ActivityState = "Em Uso";
-                                }
+                                drawMa = 68.0 + (lMag + rMag) * 5.5 + trigLoad * 6.0 + (c.RecentActionScore / 100.0) * 10.0;
+                                c.ActivityState = (c.RecentActionScore > 38.0 || lMag > 0.6 || rMag > 0.6) ? "Jogo Intenso" : "Em Uso";
                             }
                             else if (c.IdleSeconds < 600.0)
                             {
@@ -888,7 +885,12 @@ namespace GameSirBatteryMonitor
                             c.CurrentDrawMa = (int)Math.Round(drawMa);
 
                             double consumedMah = drawMa * (dt / 3600.0);
-                            c.RemainingMah = Math.Max(3.0, c.RemainingMah - consumedMah);
+                            double nextMah = Math.Max(3.0, c.RemainingMah - consumedMah);
+
+                            // Clamp floor to current hardware voltage band so estimate never drifts below actual hardware voltage tier
+                            double minPctForTier = (c.BatteryLevel == 3) ? 66.0 : (c.BatteryLevel == 2) ? 31.0 : (c.BatteryLevel == 1) ? 9.0 : 1.0;
+                            double minMahForTier = (minPctForTier / 100.0) * ControllerStateData.BATTERY_CAPACITY_MAH;
+                            c.RemainingMah = Math.Max(minMahForTier, nextMah);
 
                             CheckBatteryPopups(c, prevPct, c.EstimatedPercent);
                         }

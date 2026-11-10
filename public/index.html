@@ -257,9 +257,9 @@
     transition: border-color .15s, box-shadow .15s;
   }
   .player.p1 .stick-overlay.ls-pos { left: 22.8%; top: 31.2%; }
-  .player.p1 .stick-overlay.rs-pos { left: 61.2%; top: 51.5%; }
+  .player.p1 .stick-overlay.rs-pos { left: 62.1%; top: 50.3%; }
   .player.p2 .stick-overlay.ls-pos { left: 23.0%; top: 32.8%; }
-  .player.p2 .stick-overlay.rs-pos { left: 61.2%; top: 52.2%; }
+  .player.p2 .stick-overlay.rs-pos { left: 62.4%; top: 51.4%; }
   .stick-overlay.deflected {
     border-style: solid;
     border-color: var(--c1);
@@ -671,18 +671,6 @@
       <button class="btn b-joycpl" title="Abrir calibração e diagnóstico deste controle">
         🎯 CALIBRAR
       </button>
-      <div class="menu-wrap">
-        <button class="btn b-cal" title="Definir porcentagem atual da bateria">
-          AJUSTAR %
-        </button>
-        <div class="menu">
-          <div class="menu-title"> DEFINIR CARGA ATUAL…</div>
-          <button data-p="100">CARGA COMPLETA <span>100%</span></button>
-          <button data-p="80">CARGA RÁPIDA <span>80%</span></button>
-          <button data-p="50">METADE <span>50%</span></button>
-          <button data-p="15">TESTAR ALERTA BAIXA <span>15%</span></button>
-        </div>
-      </div>
     </div>
   </article>
 </template>
@@ -730,13 +718,6 @@
 
     el.querySelector('.b-vib').onclick = () => vibrate(slot);
     el.querySelector('.b-joycpl').onclick = () => openCalibrationModal(slot);
-
-    const menu = el.querySelector('.menu');
-    el.querySelector('.b-cal').onclick = (e) => { e.stopPropagation(); menu.classList.toggle('open'); };
-    menu.querySelectorAll('button').forEach(b => b.onclick = () => {
-      menu.classList.remove('open');
-      setBattery(slot, +b.dataset.p);
-    });
 
     const lsOverlay = el.querySelector('.ls-pos');
     const rsOverlay = el.querySelector('.rs-pos');
