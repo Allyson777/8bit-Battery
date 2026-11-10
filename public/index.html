@@ -3,9 +3,13 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>GameSir Battery Hub</title>
+<title>GAMESIR BATTERY HUB</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap" rel="stylesheet">
 <style>
   :root {
+    --font-retro: "Share Tech Mono", "Lucida Console", "Consolas", "Cascadia Mono", "Courier New", monospace;
     --p1: #22d3ee;
     --p1-2: #3b82f6;
     --p2: #f472b6;
@@ -43,10 +47,12 @@
     --glow-alpha: .28;
   }
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font-retro); text-transform: uppercase; }
   html, body { height: 100%; }
   body {
-    font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+    font-family: var(--font-retro);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
     background: var(--bg);
     color: var(--txt);
     overflow-x: hidden;
@@ -235,11 +241,22 @@
     padding: 0 26px;
   }
   .big {
-    font-size: 64px; font-weight: 800; letter-spacing: -.05em; line-height: .9;
+    font-size: 58px; font-weight: 700; letter-spacing: .02em; line-height: .95;
     font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 22px color-mix(in srgb, var(--c1) 35%, transparent);
   }
-  .big small { font-size: 26px; font-weight: 700; color: var(--txt-2); margin-left: 2px; letter-spacing: -.02em; }
-  .readout-label { font-size: 12px; color: var(--txt-2); font-weight: 600; text-transform: uppercase; letter-spacing: .12em; margin-bottom: 8px; }
+  .big small { font-size: 26px; font-weight: 700; color: var(--txt-2); margin-left: 2px; letter-spacing: .02em; }
+  .readout-label {
+    font-size: 13px; color: var(--txt-2); font-weight: 700;
+    text-transform: uppercase; letter-spacing: .14em; margin-bottom: 8px;
+  }
+  .retro-line {
+    margin: 10px 26px 0;
+    font-size: 14px;
+    letter-spacing: .1em;
+    color: var(--txt);
+    opacity: .92;
+  }
   .level-badge {
     display: inline-flex; align-items: center; gap: 8px;
     padding: 9px 14px; border-radius: 14px; font-weight: 700; font-size: 14px;
@@ -407,11 +424,12 @@
 
     <div class="readout">
       <div>
-        <div class="readout-label">Bateria</div>
+        <div class="readout-label">REMAINING BATTERY</div>
         <div class="big"><span class="pct">--</span><small>%</small></div>
       </div>
       <div class="level-badge"><span class="lvl-t">—</span></div>
     </div>
+    <div class="retro-line">REMAINING BATTERY: <span class="pct-inline">--%</span></div>
     <div class="bars"><span></span><span></span><span></span><span></span></div>
 
     <div class="stats">
@@ -517,6 +535,7 @@
       nameEl: el.querySelector('.p-name'),
       subEl: el.querySelector('.p-sub'),
       pct: el.querySelector('.pct'),
+      pctInline: el.querySelector('.pct-inline'),
       lvl: el.querySelector('.level-badge'),
       lvlT: el.querySelector('.lvl-t'),
       bars: el.querySelectorAll('.bars span'),
@@ -604,6 +623,9 @@
     card.seg.style.strokeDashoffset = CIRC * (1 - exactPct / 100);
 
     animateNumber(card, pct, exactPct);
+    if (card.pctInline) {
+      card.pctInline.textContent = (exactPct >= 99.95 ? '100' : exactPct.toFixed(1).replace('.', ',')) + '%';
+    }
 
     const remMah = c.remainingMah ?? Math.round((exactPct / 100) * 600);
     // Autonomy in gameplay (~75mA average active draw)
