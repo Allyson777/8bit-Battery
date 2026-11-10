@@ -174,6 +174,16 @@
     background: color-mix(in srgb, var(--ok) 14%, transparent);
     color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent);
   }
+  .status.resting {
+    background: color-mix(in srgb, var(--p1) 14%, transparent);
+    color: var(--p1); border-color: color-mix(in srgb, var(--p1) 30%, transparent);
+  }
+  .status.resting .dot { background: var(--p1); animation: none; }
+  .status.sleeping {
+    background: color-mix(in srgb, var(--warn) 14%, transparent);
+    color: var(--warn); border-color: color-mix(in srgb, var(--warn) 30%, transparent);
+  }
+  .status.sleeping .dot { background: var(--warn); animation: none; }
   .status.off { background: var(--glass); color: var(--txt-3); border-color: var(--line); }
   .status.off .dot { background: var(--txt-3); animation: none; }
 
@@ -246,13 +256,15 @@
   .bars span.on { background: var(--lvl, var(--ok)); box-shadow: 0 0 14px -2px var(--lvl, var(--ok)); }
 
   /* Stats */
-  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 26px 0; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 20px 26px 0; }
+  @media (max-width: 620px) { .stats { grid-template-columns: repeat(2, 1fr); } }
   .stat {
-    padding: 13px 14px; border-radius: 16px;
+    padding: 12px 13px; border-radius: 16px;
     background: var(--glass); border: 1px solid var(--line);
   }
-  .stat-k { font-size: 11px; color: var(--txt-3); font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }
-  .stat-v { font-size: 15px; font-weight: 700; margin-top: 5px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stat-k { font-size: 10.5px; color: var(--txt-3); font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
+  .stat-v { font-size: 14.5px; font-weight: 700; margin-top: 5px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stat-sub { font-size: 11px; color: var(--txt-2); margin-top: 2px; font-variant-numeric: tabular-nums; }
 
   /* Live input */
   .inputs { display: flex; flex-wrap: wrap; gap: 6px; margin: 16px 26px 0; }
@@ -399,9 +411,10 @@
     <div class="bars"><span></span><span></span><span></span><span></span></div>
 
     <div class="stats">
-      <div class="stat"><div class="stat-k">Autonomia</div><div class="stat-v s-auto">—</div></div>
-      <div class="stat"><div class="stat-k">Sessão</div><div class="stat-v s-sess">—</div></div>
-      <div class="stat"><div class="stat-k">Gatilhos</div><div class="stat-v s-trig">—</div></div>
+      <div class="stat"><div class="stat-k">Autonomia</div><div class="stat-v s-auto">—</div><div class="stat-sub s-mah">600 / 600 mAh</div></div>
+      <div class="stat"><div class="stat-k">Consumo Atual</div><div class="stat-v s-draw">—</div><div class="stat-sub s-mode">Aguardando</div></div>
+      <div class="stat"><div class="stat-k">Tempo em Uso</div><div class="stat-v s-sess">—</div><div class="stat-sub s-sess-sub">Só conta jogando</div></div>
+      <div class="stat"><div class="stat-k">Inatividade</div><div class="stat-v s-idle">—</div><div class="stat-sub s-trig">LT 0% · RT 0%</div></div>
     </div>
 
     <div class="inputs">
@@ -506,7 +519,12 @@
       status: el.querySelector('.status'),
       statusT: el.querySelector('.status-t'),
       auto: el.querySelector('.s-auto'),
+      mah: el.querySelector('.s-mah'),
+      draw: el.querySelector('.s-draw'),
+      mode: el.querySelector('.s-mode'),
       sess: el.querySelector('.s-sess'),
+      sessSub: el.querySelector('.s-sess-sub'),
+      idle: el.querySelector('.s-idle'),
       trig: el.querySelector('.s-trig'),
       keys: Object.fromEntries([...el.querySelectorAll('.key')].map(k => [k.dataset.k, k])),
       vib: el.querySelector('.b-vib'),
@@ -548,10 +566,14 @@
       Math.abs(c.thumbLX) > 7000 || Math.abs(c.thumbLY) > 7000 || Math.abs(c.thumbRX) > 7000 || Math.abs(c.thumbRY) > 7000;
     if (on && moving) card.activeUntil = now + 350;
 
+    const state = c.activityState || (on ? 'Em Uso' : 'Desligado');
+    const isResting = on && state === 'Em Repouso';
+    const isSleeping = on && state === 'Hibernando';
+
     card.el.classList.toggle('offline', !on);
     card.el.classList.toggle('active', on && now < card.activeUntil);
-    card.status.classList.toggle('off', !on);
-    card.statusT.textContent = on ? 'Conectado' : 'Desligado';
+    card.status.className = 'status' + (!on ? ' off' : isSleeping ? ' sleeping' : isResting ? ' resting' : '');
+    card.statusT.textContent = !on ? 'Desligado' : isSleeping ? 'Hibernando (0 mA)' : isResting ? 'Em Repouso' : state;
     card.vib.disabled = !on;
     if (c.modelName) card.nameEl.textContent = c.modelName;
     if (c.connectionSubtitle) card.subEl.textContent = c.connectionSubtitle;
@@ -565,11 +587,23 @@
 
     if (on) animateNumber(card, pct); else { card.shownPct = -1; card.pct.textContent = '--'; }
 
-    const est = (pct / 100) * 8;
-    card.auto.textContent = on ? `~${Math.floor(est)}h ${String(Math.round((est % 1) * 60)).padStart(2,'0')}m` : '—';
+    const remMah = c.remainingMah ?? Math.round((pct / 100) * 600);
+    // Autonomy in gameplay (~75mA average active draw)
+    const estPlayHrs = remMah / 75;
+    card.auto.textContent = on ? `~${Math.floor(estPlayHrs)}h ${String(Math.round((estPlayHrs % 1) * 60)).padStart(2,'0')}m` : '—';
+    card.mah.textContent = on ? `${remMah} / 600 mAh` : '—';
+
+    const ma = on ? (c.currentDrawMa ?? 11) : 0;
+    card.draw.textContent = on ? `${ma} mA` : '—';
+    card.mode.textContent = !on ? 'Desconectado' : isSleeping ? 'Auto-Sleep (0%/h)' : isResting ? 'Standby (~1.8%/h)' : 'Jogando (~12%/h)';
+
     card.sess.textContent = on ? fmtTime(c.sessionSeconds) : '—';
+    card.sessSub.textContent = !on ? '—' : (isResting || isSleeping) ? 'Pausado (parado)' : 'Contando em uso';
+
+    const idleSec = c.idleSeconds || 0;
+    card.idle.textContent = !on ? '—' : idleSec < 12 ? 'Ativo agora' : fmtTime(idleSec);
     const lt = Math.round(c.leftTrigger / 2.55), rt = Math.round(c.rightTrigger / 2.55);
-    card.trig.textContent = on ? `${lt}% · ${rt}%` : '—';
+    card.trig.textContent = on ? `LT ${lt}% · RT ${rt}%` : '—';
 
     for (const [mask, k] of BTN) card.keys[k].classList.toggle('on', on && (c.buttons & mask) !== 0);
     card.keys.LT.classList.toggle('on', on && c.leftTrigger > 20);

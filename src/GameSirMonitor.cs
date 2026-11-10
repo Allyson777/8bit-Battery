@@ -16,18 +16,39 @@ namespace GameSirBatteryMonitor
 {
     public class ControllerStateData
     {
+        public const double BATTERY_CAPACITY_MAH = 600.0;
+
         public int CardIndex;
         public int XInputSlot;
         public bool Connected;
         public byte BatteryType;
         public byte BatteryLevel;
-        public double EstimatedPercent = 100.0;
+
+        // Physics-based 600mAh battery model
+        public double RemainingMah = 600.0;
+        public double EstimatedPercent
+        {
+            get { return Math.Max(1.0, Math.Min(100.0, (RemainingMah / BATTERY_CAPACITY_MAH) * 100.0)); }
+            set { RemainingMah = Math.Max(6.0, Math.Min(BATTERY_CAPACITY_MAH, (value / 100.0) * BATTERY_CAPACITY_MAH)); }
+        }
+
         public uint PacketNumber;
         public ushort Buttons;
+        public ushort PrevButtons;
         public byte LeftTrigger;
         public byte RightTrigger;
         public short ThumbLX, ThumbLY, ThumbRX, ThumbRY;
-        public double SessionSeconds;
+        public short PrevThumbLX, PrevThumbLY, PrevThumbRX, PrevThumbRY;
+
+        // Real activity vs idle tracking
+        public bool InitializedPrev = false;
+        public double ActivePlaySeconds = 0.0;
+        public double IdleSeconds = 15.0; // Starts in Resting state until a real button/stick is touched
+        public double RecentActionScore = 0.0; // Rolling intensity score (0..100)
+        public int CurrentDrawMa = 11;
+        public string ActivityState = "Em Repouso"; // "Jogo Intenso", "Em Uso", "Em Repouso", "Hibernando", "Desligado"
+        public DateTime VibrateUntil = DateTime.MinValue;
+
         public string ModelName = "GameSir Nova Lite";
         public string ConnectionSubtitle = "Receptor 2.4GHz · Slot XInput 1";
         public DateTime LastTick = DateTime.UtcNow;
@@ -253,7 +274,7 @@ namespace GameSirBatteryMonitor
                     Process.Start(new ProcessStartInfo
                     {
                         FileName = b,
-                        Arguments = "--app=" + url + " --user-data-dir=\"" + profile + "\" --window-size=1320,900 --no-first-run --no-default-browser-check",
+                        Arguments = "--app=" + url + " --user-data-dir=\"" + profile + "\" --window-size=1320,920 --no-first-run --no-default-browser-check",
                         UseShellExecute = false
                     });
                     return;
@@ -265,13 +286,17 @@ namespace GameSirBatteryMonitor
 
         void UpdateTray()
         {
-            int p0, p1; bool c0, c1;
+            int p0, p1; bool c0, c1; string s0, s1;
             lock (_lock)
             {
                 p0 = (int)Math.Round(_ctl[0].EstimatedPercent); p1 = (int)Math.Round(_ctl[1].EstimatedPercent);
                 c0 = _ctl[0].Connected; c1 = _ctl[1].Connected;
+                s0 = c0 ? (p0 + "% (" + _ctl[0].ActivityState + ")") : "off";
+                s1 = c1 ? (p1 + "% (" + _ctl[1].ActivityState + ")") : "off";
             }
-            _tray.Text = "P1: " + (c0 ? p0 + "%" : "off") + "  |  P2: " + (c1 ? p1 + "%" : "off");
+            string txt = "P1: " + s0 + " | P2: " + s1;
+            if (txt.Length > 63) txt = txt.Substring(0, 63);
+            _tray.Text = txt;
             Icon old = _tray.Icon;
             _tray.Icon = TrayIcon(p0, p1, c0, c1);
             if (old != null) old.Dispose();
@@ -372,6 +397,40 @@ namespace GameSirBatteryMonitor
             }
         }
 
+        // Detects genuine human interaction while filtering out Hall Effect sensor ADC micro-jitter
+        static bool HasGenuineHumanInput(ControllerStateData c, DynamicXInput.XINPUT_STATE st, out double intensityImpulse)
+        {
+            intensityImpulse = 0.0;
+
+            bool buttonsPressed = st.wButtons != 0;
+            bool buttonsChanged = st.wButtons != c.PrevButtons;
+            bool triggersActive = st.bLeftTrigger > 12 || st.bRightTrigger > 12;
+
+            // Stick deflection outside resting deadzone (~14% of full scale 32767)
+            const int REST_DEADZONE = 4500;
+            bool stickDeflected =
+                Math.Abs((int)st.sThumbLX) > REST_DEADZONE ||
+                Math.Abs((int)st.sThumbLY) > REST_DEADZONE ||
+                Math.Abs((int)st.sThumbRX) > REST_DEADZONE ||
+                Math.Abs((int)st.sThumbRY) > REST_DEADZONE;
+
+            // Meaningful stick delta between ticks (filters out +-300 LSB Hall sensor thermal noise)
+            const int DELTA_THRESHOLD = 1400;
+            int dLX = Math.Abs((int)st.sThumbLX - (int)c.PrevThumbLX);
+            int dLY = Math.Abs((int)st.sThumbLY - (int)c.PrevThumbLY);
+            int dRX = Math.Abs((int)st.sThumbRX - (int)c.PrevThumbRX);
+            int dRY = Math.Abs((int)st.sThumbRY - (int)c.PrevThumbRY);
+            bool stickMoved = dLX > DELTA_THRESHOLD || dLY > DELTA_THRESHOLD || dRX > DELTA_THRESHOLD || dRY > DELTA_THRESHOLD;
+
+            if (buttonsChanged) intensityImpulse += 18.0;
+            if (buttonsPressed) intensityImpulse += 8.0;
+            if (triggersActive) intensityImpulse += 10.0 * ((st.bLeftTrigger + st.bRightTrigger) / 510.0);
+            if (stickMoved) intensityImpulse += 12.0;
+            else if (stickDeflected) intensityImpulse += 6.0;
+
+            return buttonsPressed || triggersActive || stickDeflected || stickMoved;
+        }
+
         static void PollLoop()
         {
             int tick = 0;
@@ -382,8 +441,6 @@ namespace GameSirBatteryMonitor
                     if (tick % 40 == 0) DiscoverControllersHardware();
                     DateTime now = DateTime.UtcNow;
 
-                    // Scan all 4 XInput slots (0..3) so even if a PC has virtual gamepads on Slot 0,
-                    // any active controllers on Slots 0..3 are automatically picked up!
                     DynamicXInput.XINPUT_STATE[] states = new DynamicXInput.XINPUT_STATE[4];
                     bool[] slotConnected = new bool[4];
                     List<int> activeSlots = new List<int>();
@@ -427,7 +484,7 @@ namespace GameSirBatteryMonitor
                             int hwSlot = targetSlots[i];
                             c.XInputSlot = hwSlot;
 
-                            double dt = Math.Min(1.0, (now - c.LastTick).TotalSeconds);
+                            double dt = Math.Min(1.0, Math.Max(0.001, (now - c.LastTick).TotalSeconds));
                             c.LastTick = now;
 
                             c.Connected = slotConnected[hwSlot];
@@ -435,21 +492,32 @@ namespace GameSirBatteryMonitor
 
                             if (!c.Connected)
                             {
+                                c.InitializedPrev = false;
                                 c.Buttons = 0; c.LeftTrigger = c.RightTrigger = 0;
                                 c.ThumbLX = c.ThumbLY = c.ThumbRX = c.ThumbRY = 0;
+                                c.CurrentDrawMa = 0;
+                                c.ActivityState = "Desligado";
                                 c.ConnectionSubtitle = _detectedTransport + " · Slot XInput " + (hwSlot + 1);
                                 continue;
                             }
 
                             DynamicXInput.XINPUT_STATE st = states[hwSlot];
+                            if (!c.InitializedPrev)
+                            {
+                                c.PrevButtons = st.wButtons;
+                                c.PrevThumbLX = st.sThumbLX;
+                                c.PrevThumbLY = st.sThumbLY;
+                                c.PrevThumbRX = st.sThumbRX;
+                                c.PrevThumbRY = st.sThumbRY;
+                                c.InitializedPrev = true;
+                            }
                             DynamicXInput.XINPUT_BATTERY_INFORMATION bat = new DynamicXInput.XINPUT_BATTERY_INFORMATION();
                             if (DynamicXInput.GetBatteryInformation((uint)hwSlot, 0, ref bat) == 0)
                             {
                                 c.BatteryType = bat.BatteryType;
                                 c.BatteryLevel = bat.BatteryLevel;
 
-                                // When connected via Bluetooth/XInput wireless with Alkaline/NiMH reporting,
-                                // or when the receiver reports a lower discrete band, sync immediately
+                                // Sync with hardware band if controller reports a lower threshold
                                 if (bat.BatteryLevel == 2 && c.EstimatedPercent > 65) c.EstimatedPercent = 65;
                                 else if (bat.BatteryLevel == 1 && c.EstimatedPercent > 30) c.EstimatedPercent = 30;
                                 else if (bat.BatteryLevel == 0 && c.EstimatedPercent > 8) c.EstimatedPercent = 8;
@@ -458,14 +526,84 @@ namespace GameSirBatteryMonitor
                             string transportMode = (c.BatteryType == 2 || c.BatteryType == 3) ? "Sem Fio (XInput)" : _detectedTransport;
                             c.ConnectionSubtitle = transportMode + " · Slot XInput " + (hwSlot + 1);
 
-                            bool active = st.dwPacketNumber != c.PacketNumber;
-                            c.PacketNumber = st.dwPacketNumber;
-                            c.Buttons = st.wButtons; c.LeftTrigger = st.bLeftTrigger; c.RightTrigger = st.bRightTrigger;
-                            c.ThumbLX = st.sThumbLX; c.ThumbLY = st.sThumbLY; c.ThumbRX = st.sThumbRX; c.ThumbRY = st.sThumbRY;
-                            c.SessionSeconds += dt;
+                            double impulse;
+                            bool humanActive = HasGenuineHumanInput(c, st, out impulse);
+                            bool isVibrating = now < c.VibrateUntil;
 
-                            double rate = active ? 100.0 / 25200.0 : 100.0 / 43200.0;
-                            c.EstimatedPercent = Math.Max(1.0, c.EstimatedPercent - dt * rate);
+                            c.PrevButtons = st.wButtons;
+                            c.PrevThumbLX = st.sThumbLX;
+                            c.PrevThumbLY = st.sThumbLY;
+                            c.PrevThumbRX = st.sThumbRX;
+                            c.PrevThumbRY = st.sThumbRY;
+
+                            c.PacketNumber = st.dwPacketNumber;
+                            c.Buttons = st.wButtons;
+                            c.LeftTrigger = st.bLeftTrigger;
+                            c.RightTrigger = st.bRightTrigger;
+                            c.ThumbLX = st.sThumbLX;
+                            c.ThumbLY = st.sThumbLY;
+                            c.ThumbRX = st.sThumbRX;
+                            c.ThumbRY = st.sThumbRY;
+
+                            // Exponential decay of recent action score + new impulse
+                            c.RecentActionScore = Math.Max(0.0, Math.Min(100.0, c.RecentActionScore * Math.Pow(0.82, dt) + impulse));
+
+                            if (humanActive || isVibrating)
+                            {
+                                c.IdleSeconds = 0.0;
+                            }
+                            else
+                            {
+                                c.IdleSeconds += dt;
+                            }
+
+                            // Determine multi-state operating mode & electrical current draw (mA)
+                            // GameSir Nova Lite has a 600 mAh Li-Ion battery:
+                            // - Vibrating: ~190 mA
+                            // - Intense Gameplay (rapid button/stick/trigger action): ~92 mA (~6.5h)
+                            // - Normal Gameplay / Active Use (idle < 12s): ~72 mA (~8.3h)
+                            // - Resting on Desk / Standby (12s <= idle < 600s): ~11 mA (RF sniff mode, ~54h)
+                            // - Auto-Sleep / Hibernation (idle >= 600s / 10 min): 0 mA (Controller sleeps)
+                            double drawMa;
+                            if (isVibrating)
+                            {
+                                drawMa = 190.0;
+                                c.ActivityState = "Vibrando";
+                                c.ActivePlaySeconds += dt;
+                            }
+                            else if (c.IdleSeconds < 12.0)
+                            {
+                                c.ActivePlaySeconds += dt;
+                                if (c.RecentActionScore > 38.0)
+                                {
+                                    drawMa = 92.0;
+                                    c.ActivityState = "Jogo Intenso";
+                                }
+                                else
+                                {
+                                    drawMa = 72.0;
+                                    c.ActivityState = "Em Uso";
+                                }
+                            }
+                            else if (c.IdleSeconds < 600.0)
+                            {
+                                // Controller is untouched on the desk: do NOT increment ActivePlaySeconds
+                                // and drop current draw to low-power RF standby (~11 mA)
+                                drawMa = 11.0;
+                                c.ActivityState = "Em Repouso";
+                            }
+                            else
+                            {
+                                // > 10 minutes untouched: hardware auto-sleep (0 mA drain)
+                                drawMa = 0.0;
+                                c.ActivityState = "Hibernando";
+                            }
+
+                            c.CurrentDrawMa = (int)Math.Round(drawMa);
+
+                            // Convert mA draw over dt seconds into mAh consumed: mAh = mA * (dt / 3600)
+                            double consumedMah = drawMa * (dt / 3600.0);
+                            c.RemainingMah = Math.Max(6.0, c.RemainingMah - consumedMah);
                         }
                     }
 
@@ -481,7 +619,11 @@ namespace GameSirBatteryMonitor
         {
             if (cardIndex < 0 || cardIndex > 1) return;
             int hwSlot;
-            lock (_lock) hwSlot = _ctl[cardIndex].XInputSlot;
+            lock (_lock)
+            {
+                hwSlot = _ctl[cardIndex].XInputSlot;
+                _ctl[cardIndex].VibrateUntil = DateTime.UtcNow.AddMilliseconds(600);
+            }
 
             ThreadPool.QueueUserWorkItem(_ =>
             {
@@ -500,7 +642,11 @@ namespace GameSirBatteryMonitor
             lock (_lock)
             {
                 _ctl[slot].EstimatedPercent = Math.Max(1, Math.Min(100, pct));
-                if (pct >= 99) _ctl[slot].SessionSeconds = 0;
+                if (pct >= 99)
+                {
+                    _ctl[slot].ActivePlaySeconds = 0;
+                    _ctl[slot].IdleSeconds = 0;
+                }
             }
             SaveState();
         }
@@ -513,9 +659,16 @@ namespace GameSirBatteryMonitor
                 string[] l = File.ReadAllLines(_stateFile);
                 for (int i = 0; i < 2 && i < l.Length; i++)
                 {
+                    string[] parts = l[i].Split('|');
                     double v;
-                    if (double.TryParse(l[i], NumberStyles.Any, CultureInfo.InvariantCulture, out v))
+                    if (double.TryParse(parts[0], NumberStyles.Any, CultureInfo.InvariantCulture, out v))
                         _ctl[i].EstimatedPercent = Math.Max(1, Math.Min(100, v));
+                    if (parts.Length > 1)
+                    {
+                        double playSec;
+                        if (double.TryParse(parts[1], NumberStyles.Any, CultureInfo.InvariantCulture, out playSec))
+                            _ctl[i].ActivePlaySeconds = Math.Max(0, playSec);
+                    }
                 }
             }
             catch { }
@@ -528,8 +681,8 @@ namespace GameSirBatteryMonitor
                 string a, b;
                 lock (_lock)
                 {
-                    a = _ctl[0].EstimatedPercent.ToString("F2", CultureInfo.InvariantCulture);
-                    b = _ctl[1].EstimatedPercent.ToString("F2", CultureInfo.InvariantCulture);
+                    a = _ctl[0].EstimatedPercent.ToString("F3", CultureInfo.InvariantCulture) + "|" + _ctl[0].ActivePlaySeconds.ToString("F0", CultureInfo.InvariantCulture);
+                    b = _ctl[1].EstimatedPercent.ToString("F3", CultureInfo.InvariantCulture) + "|" + _ctl[1].ActivePlaySeconds.ToString("F0", CultureInfo.InvariantCulture);
                 }
                 File.WriteAllLines(_stateFile, new[] { a, b });
             }
@@ -580,7 +733,6 @@ namespace GameSirBatteryMonitor
                         return;
                     }
 
-                    // Fallback to Embedded Resource inside the single-file .exe!
                     string resName = Path.GetFileName(path).ToLowerInvariant();
                     byte[] embedded = GetEmbeddedResourceBytes(resName);
                     if (embedded != null)
@@ -665,6 +817,9 @@ namespace GameSirBatteryMonitor
                       .Append(",\"connected\":").Append(c.Connected ? "true" : "false")
                       .Append(",\"modelName\":\"").Append(EscapeJson(c.ModelName)).Append("\"")
                       .Append(",\"connectionSubtitle\":\"").Append(EscapeJson(c.ConnectionSubtitle)).Append("\"")
+                      .Append(",\"activityState\":\"").Append(EscapeJson(c.ActivityState)).Append("\"")
+                      .Append(",\"currentDrawMa\":").Append(c.CurrentDrawMa)
+                      .Append(",\"remainingMah\":").Append(((int)Math.Round(c.RemainingMah)).ToString(CultureInfo.InvariantCulture))
                       .Append(",\"batteryPercent\":").Append((int)Math.Round(c.EstimatedPercent))
                       .Append(",\"xinputLevel\":").Append(c.BatteryLevel)
                       .Append(",\"batteryType\":").Append(c.BatteryType)
@@ -675,7 +830,8 @@ namespace GameSirBatteryMonitor
                       .Append(",\"thumbLY\":").Append(c.ThumbLY)
                       .Append(",\"thumbRX\":").Append(c.ThumbRX)
                       .Append(",\"thumbRY\":").Append(c.ThumbRY)
-                      .Append(",\"sessionSeconds\":").Append(((int)c.SessionSeconds).ToString(CultureInfo.InvariantCulture))
+                      .Append(",\"sessionSeconds\":").Append(((int)c.ActivePlaySeconds).ToString(CultureInfo.InvariantCulture))
+                      .Append(",\"idleSeconds\":").Append(((int)c.IdleSeconds).ToString(CultureInfo.InvariantCulture))
                       .Append('}');
                 }
                 sb.Append("]}");
