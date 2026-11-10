@@ -12,6 +12,14 @@ using System.Globalization;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
+[assembly: AssemblyTitle("GameSir Battery Hub")]
+[assembly: AssemblyDescription("Dual Wireless Controller Battery Monitor")]
+[assembly: AssemblyCompany("GameSir Community")]
+[assembly: AssemblyProduct("GameSir Battery Hub")]
+[assembly: AssemblyCopyright("Copyright © 2026")]
+[assembly: AssemblyVersion("1.0.0.0")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
+
 namespace GameSirBatteryMonitor
 {
     public class ControllerStateData
@@ -80,70 +88,69 @@ namespace GameSirBatteryMonitor
             public ushort wRightMotorSpeed;
         }
 
-        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        private static extern IntPtr LoadLibrary(string libname);
+        [DllImport("xinput1_4.dll", EntryPoint = "XInputGetState")]
+        private static extern uint XInput14_GetState(uint dwUserIndex, ref XINPUT_STATE pState);
 
-        [DllImport("kernel32.dll", CharSet = CharSet.Ansi, SetLastError = true)]
-        private static extern IntPtr GetProcAddress(IntPtr hModule, string lpProcName);
+        [DllImport("xinput1_4.dll", EntryPoint = "XInputSetState")]
+        private static extern uint XInput14_SetState(uint dwUserIndex, ref XINPUT_VIBRATION pVibration);
 
-        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-        private delegate uint XInputGetStateDelegate(uint dwUserIndex, ref XINPUT_STATE pState);
+        [DllImport("xinput1_4.dll", EntryPoint = "XInputGetBatteryInformation")]
+        private static extern uint XInput14_GetBattery(uint dwUserIndex, byte devType, ref XINPUT_BATTERY_INFORMATION pBatteryInformation);
 
-        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-        private delegate uint XInputSetStateDelegate(uint dwUserIndex, ref XINPUT_VIBRATION pVibration);
+        [DllImport("xinput9_1_0.dll", EntryPoint = "XInputGetState")]
+        private static extern uint XInput91_GetState(uint dwUserIndex, ref XINPUT_STATE pState);
 
-        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-        private delegate uint XInputGetBatteryInformationDelegate(uint dwUserIndex, byte devType, ref XINPUT_BATTERY_INFORMATION pBatteryInformation);
+        [DllImport("xinput9_1_0.dll", EntryPoint = "XInputSetState")]
+        private static extern uint XInput91_SetState(uint dwUserIndex, ref XINPUT_VIBRATION pVibration);
 
-        private static XInputGetStateDelegate _getState;
-        private static XInputSetStateDelegate _setState;
-        private static XInputGetBatteryInformationDelegate _getBattery;
+        private static bool _use14 = true;
 
         static DynamicXInput()
         {
-            string[] dlls = { "xinput1_4.dll", "xinput1_3.dll", "xinput9_1_0.dll" };
-            foreach (string dll in dlls)
+            try
             {
-                IntPtr hMod = LoadLibrary(dll);
-                if (hMod != IntPtr.Zero)
-                {
-                    IntPtr pGetState = GetProcAddress(hMod, "XInputGetState");
-                    IntPtr pSetState = GetProcAddress(hMod, "XInputSetState");
-                    IntPtr pGetBat = GetProcAddress(hMod, "XInputGetBatteryInformation");
-
-                    if (pGetState != IntPtr.Zero)
-                        _getState = (XInputGetStateDelegate)Marshal.GetDelegateForFunctionPointer(pGetState, typeof(XInputGetStateDelegate));
-                    if (pSetState != IntPtr.Zero)
-                        _setState = (XInputSetStateDelegate)Marshal.GetDelegateForFunctionPointer(pSetState, typeof(XInputSetStateDelegate));
-                    if (pGetBat != IntPtr.Zero)
-                        _getBattery = (XInputGetBatteryInformationDelegate)Marshal.GetDelegateForFunctionPointer(pGetBat, typeof(XInputGetBatteryInformationDelegate));
-
-                    if (_getState != null) break;
-                }
+                XINPUT_STATE test = new XINPUT_STATE();
+                XInput14_GetState(0, ref test);
+                _use14 = true;
+            }
+            catch
+            {
+                _use14 = false;
             }
         }
 
         public static uint GetState(uint index, ref XINPUT_STATE state)
         {
-            if (_getState == null) return 1167;
-            return _getState(index, ref state);
+            try
+            {
+                return _use14 ? XInput14_GetState(index, ref state) : XInput91_GetState(index, ref state);
+            }
+            catch { return 1167; }
         }
 
         public static uint SetState(uint index, ref XINPUT_VIBRATION vib)
         {
-            if (_setState == null) return 1167;
-            return _setState(index, ref vib);
+            try
+            {
+                return _use14 ? XInput14_SetState(index, ref vib) : XInput91_SetState(index, ref vib);
+            }
+            catch { return 1167; }
         }
 
         public static uint GetBatteryInformation(uint index, byte devType, ref XINPUT_BATTERY_INFORMATION bat)
         {
-            if (_getBattery == null)
+            try
             {
-                bat.BatteryType = 1;
-                bat.BatteryLevel = 3;
-                return 0;
+                if (_use14)
+                {
+                    return XInput14_GetBattery(index, devType, ref bat);
+                }
             }
-            return _getBattery(index, devType, ref bat);
+            catch { }
+
+            bat.BatteryType = 1;
+            bat.BatteryLevel = 3;
+            return 0;
         }
     }
 
