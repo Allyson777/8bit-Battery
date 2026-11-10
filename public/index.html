@@ -357,6 +357,10 @@
       </div>
     </div>
     <div class="top-right">
+      <button class="chip" id="autostart-btn" onclick="toggleAutoStart()" style="cursor:pointer" title="Clique para ativar/desativar inicialização automática com o Windows">
+        <span class="dot" id="autostart-dot"></span>
+        <span id="autostart-text">2º Plano + Auto-Start: Ativo</span>
+      </button>
       <div class="chip"><span class="dot" id="live-dot"></span><span id="live-text">Conectando…</span></div>
       <div class="theme-toggle" role="group" aria-label="Tema">
         <div class="knob"></div>
@@ -368,7 +372,7 @@
 
   <main id="players"></main>
 
-  <footer id="footer">Aperte qualquer botão no controle para ver qual card acende · Dados via XInput (receptor 2.4GHz)</footer>
+  <footer id="footer">Pode fechar esta janela (X) tranquilo: o app continua na bandeja do Windows (perto do relógio) salvando a bateria a cada 2s sem nunca resetar sozinho.</footer>
   <div class="toast" id="toast"></div>
 
 <template id="tpl">
@@ -546,14 +550,26 @@
     const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = Math.floor(sec % 60);
     return h ? `${h}h ${String(m).padStart(2,'0')}m` : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
   }
-  function animateNumber(card, target) {
-    if (card.shownPct < 0) { card.shownPct = target; card.pct.textContent = target; return; }
-    if (card.shownPct === target) return;
+  function animateNumber(card, target, exactVal) {
+    const fmt = (v) => {
+      if (v >= 99.95) return '100';
+      return v.toFixed(1).replace('.', ',');
+    };
+    if (card.shownPct < 0) {
+      card.shownPct = exactVal;
+      card.pct.textContent = fmt(exactVal);
+      return;
+    }
+    if (Math.abs(card.shownPct - exactVal) < 0.05) {
+      card.pct.textContent = fmt(exactVal);
+      return;
+    }
     const from = card.shownPct, t0 = performance.now();
-    card.shownPct = target;
+    card.shownPct = exactVal;
     const step = (t) => {
-      const k = Math.min(1, (t - t0) / 700), e = 1 - Math.pow(1 - k, 3);
-      card.pct.textContent = Math.round(from + (target - from) * e);
+      const k = Math.min(1, (t - t0) / 500), e = 1 - Math.pow(1 - k, 3);
+      const cur = from + (exactVal - from) * e;
+      card.pct.textContent = fmt(cur);
       if (k < 1) requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
@@ -573,37 +589,39 @@
     card.el.classList.toggle('offline', !on);
     card.el.classList.toggle('active', on && now < card.activeUntil);
     card.status.className = 'status' + (!on ? ' off' : isSleeping ? ' sleeping' : isResting ? ' resting' : '');
-    card.statusT.textContent = !on ? 'Desligado' : isSleeping ? 'Hibernando (0 mA)' : isResting ? 'Em Repouso' : state;
+    card.statusT.textContent = !on ? 'Desligado (Salvo)' : isSleeping ? 'Hibernando (0 mA)' : isResting ? 'Em Repouso' : state;
     card.vib.disabled = !on;
     if (c.modelName) card.nameEl.textContent = c.modelName;
     if (c.connectionSubtitle) card.subEl.textContent = c.connectionSubtitle;
 
-    const pct = on ? c.batteryPercent : 0;
-    const [label, color, cells] = on ? levelInfo(pct) : ['Sem sinal', 'var(--txt-3)', 0];
-    card.el.style.setProperty('--lvl', color);
-    card.lvlT.textContent = label;
+    // Even if controller is turned off, always display its last saved battery state!
+    const exactPct = typeof c.batteryPercentExact === 'number' ? c.batteryPercentExact : (c.batteryPercent ?? 100);
+    const pct = c.batteryPercent ?? Math.floor(exactPct);
+    const [label, color, cells] = levelInfo(pct);
+    card.el.style.setProperty('--lvl', on ? color : 'var(--txt-2)');
+    card.lvlT.textContent = on ? label : `${label} (Último estado)`;
     card.bars.forEach((b, i) => b.classList.toggle('on', i < cells));
-    card.seg.style.strokeDashoffset = CIRC * (1 - pct / 100);
+    card.seg.style.strokeDashoffset = CIRC * (1 - exactPct / 100);
 
-    if (on) animateNumber(card, pct); else { card.shownPct = -1; card.pct.textContent = '--'; }
+    animateNumber(card, pct, exactPct);
 
-    const remMah = c.remainingMah ?? Math.round((pct / 100) * 600);
+    const remMah = c.remainingMah ?? Math.round((exactPct / 100) * 600);
     // Autonomy in gameplay (~75mA average active draw)
     const estPlayHrs = remMah / 75;
-    card.auto.textContent = on ? `~${Math.floor(estPlayHrs)}h ${String(Math.round((estPlayHrs % 1) * 60)).padStart(2,'0')}m` : '—';
-    card.mah.textContent = on ? `${remMah} / 600 mAh` : '—';
+    card.auto.textContent = `~${Math.floor(estPlayHrs)}h ${String(Math.round((estPlayHrs % 1) * 60)).padStart(2,'0')}m`;
+    card.mah.textContent = `${remMah} / 600 mAh`;
 
     const ma = on ? (c.currentDrawMa ?? 11) : 0;
-    card.draw.textContent = on ? `${ma} mA` : '—';
-    card.mode.textContent = !on ? 'Desconectado' : isSleeping ? 'Auto-Sleep (0%/h)' : isResting ? 'Standby (~1.8%/h)' : 'Jogando (~12%/h)';
+    card.draw.textContent = `${ma} mA`;
+    card.mode.textContent = !on ? 'Desligado (0%/h)' : isSleeping ? 'Auto-Sleep (0%/h)' : isResting ? 'Standby (~1.8%/h)' : 'Jogando (~12%/h)';
 
-    card.sess.textContent = on ? fmtTime(c.sessionSeconds) : '—';
-    card.sessSub.textContent = !on ? '—' : (isResting || isSleeping) ? 'Pausado (parado)' : 'Contando em uso';
+    card.sess.textContent = fmtTime(c.sessionSeconds || 0);
+    card.sessSub.textContent = !on ? 'Salvo na memória' : (isResting || isSleeping) ? 'Pausado (parado)' : 'Contando em uso';
 
     const idleSec = c.idleSeconds || 0;
-    card.idle.textContent = !on ? '—' : idleSec < 12 ? 'Ativo agora' : fmtTime(idleSec);
+    card.idle.textContent = !on ? 'Controle desligado' : idleSec < 12 ? 'Ativo agora' : fmtTime(idleSec);
     const lt = Math.round(c.leftTrigger / 2.55), rt = Math.round(c.rightTrigger / 2.55);
-    card.trig.textContent = on ? `LT ${lt}% · RT ${rt}%` : '—';
+    card.trig.textContent = on ? `LT ${lt}% · RT ${rt}%` : 'Sem consumo (0 mA)';
 
     for (const [mask, k] of BTN) card.keys[k].classList.toggle('on', on && (c.buttons & mask) !== 0);
     card.keys.LT.classList.toggle('on', on && c.leftTrigger > 20);
@@ -618,7 +636,13 @@
       d.controllers.forEach(c => cards[c.slot] && render(cards[c.slot], c));
       const n = d.controllers.filter(c => c.connected).length;
       document.getElementById('live-dot').classList.remove('off');
-      document.getElementById('live-text').textContent = n === 2 ? 'Dois controles ativos' : n === 1 ? 'Um controle ativo' : 'Nenhum controle ligado';
+      document.getElementById('live-text').textContent = n === 2 ? 'Dois controles ativos' : n === 1 ? 'Um controle ativo' : 'Salvo na memória (Standby)';
+      const asDot = document.getElementById('autostart-dot');
+      const asTxt = document.getElementById('autostart-text');
+      if (asDot && asTxt && typeof d.autoStart === 'boolean') {
+        asDot.classList.toggle('off', !d.autoStart);
+        asTxt.textContent = d.autoStart ? '2º Plano + Auto-Start: Ativo' : '2º Plano Ativo (Auto-Start Off)';
+      }
       fails = 0;
     } catch {
       if (++fails > 3) {
@@ -645,7 +669,15 @@
   }
   async function setBattery(slot, p) {
     await fetch(`/api/set-battery?slot=${slot}&percent=${p}`, { method: 'POST' }).catch(() => {});
-    toast(`P${slot + 1} ajustado para ${p}%`);
+    toast(`P${slot + 1} ajustado para ${p}% (salvo em disco)`);
+  }
+  async function toggleAutoStart() {
+    try {
+      const r = await fetch('/api/toggle-autostart', { method: 'POST' });
+      const d = await r.json();
+      toast(d.autoStart ? 'Iniciar com o Windows: ATIVADO ✅' : 'Iniciar com o Windows: DESATIVADO');
+      tick();
+    } catch {}
   }
 </script>
 </body>

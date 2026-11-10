@@ -11,14 +11,15 @@ using System.Windows.Forms;
 using System.Globalization;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using Microsoft.Win32;
 
 [assembly: AssemblyTitle("GameSir Battery Hub")]
 [assembly: AssemblyDescription("Dual Wireless Controller Battery Monitor")]
 [assembly: AssemblyCompany("GameSir Community")]
 [assembly: AssemblyProduct("GameSir Battery Hub")]
 [assembly: AssemblyCopyright("Copyright © 2026")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyVersion("1.1.0.0")]
+[assembly: AssemblyFileVersion("1.1.0.0")]
 
 namespace GameSirBatteryMonitor
 {
@@ -29,15 +30,16 @@ namespace GameSirBatteryMonitor
         public int CardIndex;
         public int XInputSlot;
         public bool Connected;
+        public bool WasConnected;
         public byte BatteryType;
         public byte BatteryLevel;
 
-        // Physics-based 600mAh battery model
+        // Exact mAh remaining (persisted to disk continuously, never resets unless user clicks 100%)
         public double RemainingMah = 600.0;
         public double EstimatedPercent
         {
-            get { return Math.Max(1.0, Math.Min(100.0, (RemainingMah / BATTERY_CAPACITY_MAH) * 100.0)); }
-            set { RemainingMah = Math.Max(6.0, Math.Min(BATTERY_CAPACITY_MAH, (value / 100.0) * BATTERY_CAPACITY_MAH)); }
+            get { return Math.Max(0.5, Math.Min(100.0, (RemainingMah / BATTERY_CAPACITY_MAH) * 100.0)); }
+            set { RemainingMah = Math.Max(3.0, Math.Min(BATTERY_CAPACITY_MAH, (value / 100.0) * BATTERY_CAPACITY_MAH)); }
         }
 
         public uint PacketNumber;
@@ -157,6 +159,8 @@ namespace GameSirBatteryMonitor
     public class Program : ApplicationContext
     {
         public const int PORT = 47832;
+        private const string RUN_REG_KEY = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        private const string RUN_VALUE_NAME = "GameSirBatteryHub";
 
         // ---------------- SetupAPI & HID for Universal Device Discovery ----------------
         const uint DIGCF_PRESENT = 0x2, DIGCF_DEVICEINTERFACE = 0x10;
@@ -200,6 +204,7 @@ namespace GameSirBatteryMonitor
         static volatile bool _running = true;
 
         NotifyIcon _tray;
+        MenuItem _autoStartMenuItem;
         System.Windows.Forms.Timer _trayTimer;
 
         [STAThread]
@@ -219,6 +224,7 @@ namespace GameSirBatteryMonitor
             }
             catch
             {
+                // Already running in background! Just open the UI window and exit this second process
                 if (!background) OpenAppWindow();
                 return;
             }
@@ -229,6 +235,26 @@ namespace GameSirBatteryMonitor
             }
             LoadState();
 
+            // Enable auto-start with Windows on first run if not set yet
+            string firstRunFlag = Path.Combine(appDataFolder, "autostart_initialized.flag");
+            if (!File.Exists(firstRunFlag))
+            {
+                try
+                {
+                    SetAutoStart(true);
+                    File.WriteAllText(firstRunFlag, "1");
+                }
+                catch { }
+            }
+
+            // Guarantee state is saved on process exit or Windows shutdown/restart
+            Application.ApplicationExit += (s, e) => SaveState();
+            try
+            {
+                SystemEvents.SessionEnding += (s, e) => SaveState();
+            }
+            catch { }
+
             Application.EnableVisualStyles();
             Application.Run(new Program(!background));
         }
@@ -236,32 +262,93 @@ namespace GameSirBatteryMonitor
         public Program(bool openWindow)
         {
             ContextMenu menu = new ContextMenu();
-            menu.MenuItems.Add("Abrir GameSir Battery Hub", (s, e) => OpenAppWindow());
+            menu.MenuItems.Add("Abrir Painel GameSir Battery Hub", (s, e) => OpenAppWindow());
             menu.MenuItems.Add("-");
             menu.MenuItems.Add("Vibrar Controle P1", (s, e) => Vibrate(0));
             menu.MenuItems.Add("Vibrar Controle P2", (s, e) => Vibrate(1));
             menu.MenuItems.Add("-");
-            menu.MenuItems.Add("Marcar Ambos 100% Carregados", (s, e) => { SetBattery(0, 100); SetBattery(1, 100); });
+            menu.MenuItems.Add("Marcar P1 como 100% Carregado", (s, e) => SetBattery(0, 100));
+            menu.MenuItems.Add("Marcar P2 como 100% Carregado", (s, e) => SetBattery(1, 100));
             menu.MenuItems.Add("-");
-            menu.MenuItems.Add("Sair", (s, e) => { _running = false; _tray.Visible = false; SaveState(); Application.Exit(); });
+
+            _autoStartMenuItem = new MenuItem("Iniciar junto com o Windows", (s, e) =>
+            {
+                bool next = !IsAutoStartEnabled();
+                SetAutoStart(next);
+                _autoStartMenuItem.Checked = IsAutoStartEnabled();
+            });
+            _autoStartMenuItem.Checked = IsAutoStartEnabled();
+            menu.MenuItems.Add(_autoStartMenuItem);
+
+            menu.MenuItems.Add("-");
+            menu.MenuItems.Add("Sair completamente (Parar 2º plano)", (s, e) =>
+            {
+                _running = false;
+                SaveState();
+                _tray.Visible = false;
+                Application.Exit();
+            });
 
             _tray = new NotifyIcon
             {
-                Text = "GameSir Battery Hub",
+                Text = "GameSir Battery Hub (Rodando em 2º plano)",
                 Icon = TrayIcon(100, 100, false, false),
                 ContextMenu = menu,
                 Visible = true
             };
             _tray.DoubleClick += (s, e) => OpenAppWindow();
+            _tray.MouseUp += (s, e) =>
+            {
+                if (e.Button == MouseButtons.Left) OpenAppWindow();
+            };
 
             new Thread(PollLoop) { IsBackground = true }.Start();
             new Thread(ServerLoop) { IsBackground = true }.Start();
 
-            _trayTimer = new System.Windows.Forms.Timer { Interval = 3000 };
+            _trayTimer = new System.Windows.Forms.Timer { Interval = 2000 };
             _trayTimer.Tick += (s, e) => UpdateTray();
             _trayTimer.Start();
+            UpdateTray();
 
-            if (openWindow) OpenAppWindow();
+            if (openWindow)
+            {
+                OpenAppWindow();
+            }
+        }
+
+        private static bool IsAutoStartEnabled()
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(RUN_REG_KEY, false))
+                {
+                    if (key == null) return false;
+                    object val = key.GetValue(RUN_VALUE_NAME);
+                    return val != null && val.ToString().Length > 0;
+                }
+            }
+            catch { return false; }
+        }
+
+        private static void SetAutoStart(bool enable)
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(RUN_REG_KEY, true))
+                {
+                    if (key == null) return;
+                    if (enable)
+                    {
+                        string exePath = Assembly.GetExecutingAssembly().Location;
+                        key.SetValue(RUN_VALUE_NAME, "\"" + exePath + "\" --background");
+                    }
+                    else
+                    {
+                        key.DeleteValue(RUN_VALUE_NAME, false);
+                    }
+                }
+            }
+            catch { }
         }
 
         public static void OpenAppWindow()
@@ -281,7 +368,7 @@ namespace GameSirBatteryMonitor
                     Process.Start(new ProcessStartInfo
                     {
                         FileName = b,
-                        Arguments = "--app=" + url + " --user-data-dir=\"" + profile + "\" --window-size=1320,920 --no-first-run --no-default-browser-check",
+                        Arguments = "--app=" + url + " --user-data-dir=\"" + profile + "\" --window-size=1320,920 --disable-background-mode --disable-extensions --no-first-run --no-default-browser-check",
                         UseShellExecute = false
                     });
                     return;
@@ -296,14 +383,16 @@ namespace GameSirBatteryMonitor
             int p0, p1; bool c0, c1; string s0, s1;
             lock (_lock)
             {
-                p0 = (int)Math.Round(_ctl[0].EstimatedPercent); p1 = (int)Math.Round(_ctl[1].EstimatedPercent);
+                p0 = (int)Math.Floor(_ctl[0].EstimatedPercent + 0.001);
+                p1 = (int)Math.Floor(_ctl[1].EstimatedPercent + 0.001);
                 c0 = _ctl[0].Connected; c1 = _ctl[1].Connected;
-                s0 = c0 ? (p0 + "% (" + _ctl[0].ActivityState + ")") : "off";
-                s1 = c1 ? (p1 + "% (" + _ctl[1].ActivityState + ")") : "off";
+                s0 = c0 ? (_ctl[0].EstimatedPercent.ToString("F1", CultureInfo.InvariantCulture) + "% (" + _ctl[0].ActivityState + ")") : (_ctl[0].EstimatedPercent.ToString("F0", CultureInfo.InvariantCulture) + "% (Off)");
+                s1 = c1 ? (_ctl[1].EstimatedPercent.ToString("F1", CultureInfo.InvariantCulture) + "% (" + _ctl[1].ActivityState + ")") : (_ctl[1].EstimatedPercent.ToString("F0", CultureInfo.InvariantCulture) + "% (Off)");
             }
             string txt = "P1: " + s0 + " | P2: " + s1;
             if (txt.Length > 63) txt = txt.Substring(0, 63);
             _tray.Text = txt;
+            if (_autoStartMenuItem != null) _autoStartMenuItem.Checked = IsAutoStartEnabled();
             Icon old = _tray.Icon;
             _tray.Icon = TrayIcon(p0, p1, c0, c1);
             if (old != null) old.Dispose();
@@ -325,9 +414,9 @@ namespace GameSirBatteryMonitor
         {
             using (Pen p = new Pen(Color.FromArgb(220, 225, 235))) g.DrawRectangle(p, x, 2, 5, 12);
             g.FillRectangle(Brushes.Gainsboro, x + 1, 0, 3, 2);
-            if (!on) return;
             int h = Math.Max(1, (int)Math.Round(pct / 100.0 * 11));
-            using (Brush b = new SolidBrush(pct < 20 ? Color.FromArgb(248, 113, 113) : col)) g.FillRectangle(b, x + 1, 14 - h, 4, h);
+            Color drawCol = !on ? Color.FromArgb(110, 120, 140) : (pct < 20 ? Color.FromArgb(248, 113, 113) : col);
+            using (Brush b = new SolidBrush(drawCol)) g.FillRectangle(b, x + 1, 14 - h, 4, h);
         }
 
         // ---------------- Universal Hardware Discovery ----------------
@@ -413,7 +502,6 @@ namespace GameSirBatteryMonitor
             bool buttonsChanged = st.wButtons != c.PrevButtons;
             bool triggersActive = st.bLeftTrigger > 12 || st.bRightTrigger > 12;
 
-            // Stick deflection outside resting deadzone (~14% of full scale 32767)
             const int REST_DEADZONE = 4500;
             bool stickDeflected =
                 Math.Abs((int)st.sThumbLX) > REST_DEADZONE ||
@@ -421,7 +509,6 @@ namespace GameSirBatteryMonitor
                 Math.Abs((int)st.sThumbRX) > REST_DEADZONE ||
                 Math.Abs((int)st.sThumbRY) > REST_DEADZONE;
 
-            // Meaningful stick delta between ticks (filters out +-300 LSB Hall sensor thermal noise)
             const int DELTA_THRESHOLD = 1400;
             int dLX = Math.Abs((int)st.sThumbLX - (int)c.PrevThumbLX);
             int dLY = Math.Abs((int)st.sThumbLY - (int)c.PrevThumbLY);
@@ -483,6 +570,8 @@ namespace GameSirBatteryMonitor
                         }
                     }
 
+                    bool stateTransitioned = false;
+
                     lock (_lock)
                     {
                         for (int i = 0; i < 2; i++)
@@ -494,7 +583,13 @@ namespace GameSirBatteryMonitor
                             double dt = Math.Min(1.0, Math.Max(0.001, (now - c.LastTick).TotalSeconds));
                             c.LastTick = now;
 
-                            c.Connected = slotConnected[hwSlot];
+                            bool nowConnected = slotConnected[hwSlot];
+                            if (nowConnected != c.WasConnected)
+                            {
+                                stateTransitioned = true;
+                                c.WasConnected = nowConnected;
+                            }
+                            c.Connected = nowConnected;
                             c.ModelName = _detectedModel;
 
                             if (!c.Connected)
@@ -518,13 +613,14 @@ namespace GameSirBatteryMonitor
                                 c.PrevThumbRY = st.sThumbRY;
                                 c.InitializedPrev = true;
                             }
+
                             DynamicXInput.XINPUT_BATTERY_INFORMATION bat = new DynamicXInput.XINPUT_BATTERY_INFORMATION();
                             if (DynamicXInput.GetBatteryInformation((uint)hwSlot, 0, ref bat) == 0)
                             {
                                 c.BatteryType = bat.BatteryType;
                                 c.BatteryLevel = bat.BatteryLevel;
 
-                                // Sync with hardware band if controller reports a lower threshold
+                                // Only clamp downward if hardware reports a lower discrete threshold; NEVER reset upward automatically!
                                 if (bat.BatteryLevel == 2 && c.EstimatedPercent > 65) c.EstimatedPercent = 65;
                                 else if (bat.BatteryLevel == 1 && c.EstimatedPercent > 30) c.EstimatedPercent = 30;
                                 else if (bat.BatteryLevel == 0 && c.EstimatedPercent > 8) c.EstimatedPercent = 8;
@@ -552,7 +648,6 @@ namespace GameSirBatteryMonitor
                             c.ThumbRX = st.sThumbRX;
                             c.ThumbRY = st.sThumbRY;
 
-                            // Exponential decay of recent action score + new impulse
                             c.RecentActionScore = Math.Max(0.0, Math.Min(100.0, c.RecentActionScore * Math.Pow(0.82, dt) + impulse));
 
                             if (humanActive || isVibrating)
@@ -564,13 +659,7 @@ namespace GameSirBatteryMonitor
                                 c.IdleSeconds += dt;
                             }
 
-                            // Determine multi-state operating mode & electrical current draw (mA)
-                            // GameSir Nova Lite has a 600 mAh Li-Ion battery:
-                            // - Vibrating: ~190 mA
-                            // - Intense Gameplay (rapid button/stick/trigger action): ~92 mA (~6.5h)
-                            // - Normal Gameplay / Active Use (idle < 12s): ~72 mA (~8.3h)
-                            // - Resting on Desk / Standby (12s <= idle < 600s): ~11 mA (RF sniff mode, ~54h)
-                            // - Auto-Sleep / Hibernation (idle >= 600s / 10 min): 0 mA (Controller sleeps)
+                            string prevActivity = c.ActivityState;
                             double drawMa;
                             if (isVibrating)
                             {
@@ -594,27 +683,28 @@ namespace GameSirBatteryMonitor
                             }
                             else if (c.IdleSeconds < 600.0)
                             {
-                                // Controller is untouched on the desk: do NOT increment ActivePlaySeconds
-                                // and drop current draw to low-power RF standby (~11 mA)
                                 drawMa = 11.0;
                                 c.ActivityState = "Em Repouso";
                             }
                             else
                             {
-                                // > 10 minutes untouched: hardware auto-sleep (0 mA drain)
                                 drawMa = 0.0;
                                 c.ActivityState = "Hibernando";
                             }
 
+                            if (prevActivity != c.ActivityState) stateTransitioned = true;
                             c.CurrentDrawMa = (int)Math.Round(drawMa);
 
-                            // Convert mA draw over dt seconds into mAh consumed: mAh = mA * (dt / 3600)
                             double consumedMah = drawMa * (dt / 3600.0);
-                            c.RemainingMah = Math.Max(6.0, c.RemainingMah - consumedMah);
+                            c.RemainingMah = Math.Max(3.0, c.RemainingMah - consumedMah);
                         }
                     }
 
-                    if (tick % 300 == 0) SaveState();
+                    // Auto-save every 2 seconds (40 ticks) OR immediately on any state transition
+                    if (stateTransitioned || (tick % 40 == 0))
+                    {
+                        SaveState();
+                    }
                     tick++;
                 }
                 catch { }
@@ -652,7 +742,7 @@ namespace GameSirBatteryMonitor
                 if (pct >= 99)
                 {
                     _ctl[slot].ActivePlaySeconds = 0;
-                    _ctl[slot].IdleSeconds = 0;
+                    _ctl[slot].IdleSeconds = 15.0;
                 }
             }
             SaveState();
@@ -669,12 +759,18 @@ namespace GameSirBatteryMonitor
                     string[] parts = l[i].Split('|');
                     double v;
                     if (double.TryParse(parts[0], NumberStyles.Any, CultureInfo.InvariantCulture, out v))
-                        _ctl[i].EstimatedPercent = Math.Max(1, Math.Min(100, v));
+                        _ctl[i].EstimatedPercent = Math.Max(0.5, Math.Min(100.0, v));
                     if (parts.Length > 1)
                     {
                         double playSec;
                         if (double.TryParse(parts[1], NumberStyles.Any, CultureInfo.InvariantCulture, out playSec))
                             _ctl[i].ActivePlaySeconds = Math.Max(0, playSec);
+                    }
+                    if (parts.Length > 2)
+                    {
+                        double mah;
+                        if (double.TryParse(parts[2], NumberStyles.Any, CultureInfo.InvariantCulture, out mah))
+                            _ctl[i].RemainingMah = Math.Max(3.0, Math.Min(ControllerStateData.BATTERY_CAPACITY_MAH, mah));
                     }
                 }
             }
@@ -688,10 +784,17 @@ namespace GameSirBatteryMonitor
                 string a, b;
                 lock (_lock)
                 {
-                    a = _ctl[0].EstimatedPercent.ToString("F3", CultureInfo.InvariantCulture) + "|" + _ctl[0].ActivePlaySeconds.ToString("F0", CultureInfo.InvariantCulture);
-                    b = _ctl[1].EstimatedPercent.ToString("F3", CultureInfo.InvariantCulture) + "|" + _ctl[1].ActivePlaySeconds.ToString("F0", CultureInfo.InvariantCulture);
+                    a = _ctl[0].EstimatedPercent.ToString("F4", CultureInfo.InvariantCulture) + "|" +
+                        _ctl[0].ActivePlaySeconds.ToString("F1", CultureInfo.InvariantCulture) + "|" +
+                        _ctl[0].RemainingMah.ToString("F4", CultureInfo.InvariantCulture);
+                    b = _ctl[1].EstimatedPercent.ToString("F4", CultureInfo.InvariantCulture) + "|" +
+                        _ctl[1].ActivePlaySeconds.ToString("F1", CultureInfo.InvariantCulture) + "|" +
+                        _ctl[1].RemainingMah.ToString("F4", CultureInfo.InvariantCulture);
                 }
-                File.WriteAllLines(_stateFile, new[] { a, b });
+                string tmp = _stateFile + ".tmp";
+                File.WriteAllLines(tmp, new[] { a, b });
+                if (File.Exists(_stateFile)) File.Delete(_stateFile);
+                File.Move(tmp, _stateFile);
             }
             catch { }
         }
@@ -730,6 +833,13 @@ namespace GameSirBatteryMonitor
                     if (path == "/api/status") { Send(ns, "200 OK", "application/json; charset=utf-8", Encoding.UTF8.GetBytes(StatusJson())); return; }
                     if (path == "/api/vibrate") { Vibrate(Q(url, "slot", 0)); Send(ns, "200 OK", "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}")); return; }
                     if (path == "/api/set-battery") { SetBattery(Q(url, "slot", 0), Q(url, "percent", 100)); Send(ns, "200 OK", "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}")); return; }
+                    if (path == "/api/toggle-autostart")
+                    {
+                        bool next = !IsAutoStartEnabled();
+                        SetAutoStart(next);
+                        Send(ns, "200 OK", "application/json", Encoding.UTF8.GetBytes("{\"autoStart\":" + (IsAutoStartEnabled() ? "true" : "false") + "}"));
+                        return;
+                    }
 
                     if (path == "/") path = "/index.html";
                     string pub = Path.GetFullPath(Path.Combine(_baseDir, "public"));
@@ -812,9 +922,12 @@ namespace GameSirBatteryMonitor
         static string StatusJson()
         {
             StringBuilder sb = new StringBuilder();
+            bool autoStart = IsAutoStartEnabled();
             lock (_lock)
             {
-                sb.Append("{\"dongleCount\":").Append(_dongles).Append(",\"controllers\":[");
+                sb.Append("{\"dongleCount\":").Append(_dongles)
+                  .Append(",\"autoStart\":").Append(autoStart ? "true" : "false")
+                  .Append(",\"controllers\":[");
                 for (int i = 0; i < 2; i++)
                 {
                     ControllerStateData c = _ctl[i];
@@ -826,8 +939,9 @@ namespace GameSirBatteryMonitor
                       .Append(",\"connectionSubtitle\":\"").Append(EscapeJson(c.ConnectionSubtitle)).Append("\"")
                       .Append(",\"activityState\":\"").Append(EscapeJson(c.ActivityState)).Append("\"")
                       .Append(",\"currentDrawMa\":").Append(c.CurrentDrawMa)
-                      .Append(",\"remainingMah\":").Append(((int)Math.Round(c.RemainingMah)).ToString(CultureInfo.InvariantCulture))
-                      .Append(",\"batteryPercent\":").Append((int)Math.Round(c.EstimatedPercent))
+                      .Append(",\"remainingMah\":").Append(c.RemainingMah.ToString("F1", CultureInfo.InvariantCulture))
+                      .Append(",\"batteryPercent\":").Append((int)Math.Floor(c.EstimatedPercent + 0.001))
+                      .Append(",\"batteryPercentExact\":").Append(c.EstimatedPercent.ToString("F1", CultureInfo.InvariantCulture))
                       .Append(",\"xinputLevel\":").Append(c.BatteryLevel)
                       .Append(",\"batteryType\":").Append(c.BatteryType)
                       .Append(",\"buttons\":").Append(c.Buttons)
