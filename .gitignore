@@ -1,0 +1,8 @@
+# Runtime state & logs
+battery_state.txt
+error.log
+*.pdb
+*.user
+.vs/
+thumbs.db
+.DS_Store
