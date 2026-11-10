@@ -470,6 +470,7 @@ namespace GameSirBatteryMonitor
         static void DiscoverControllersHardware()
         {
             int gamesirCount = 0;
+            int wiredUsbCableCount = 0;
             int totalXusb = 0;
             string model = null;
             string transport = null;
@@ -521,6 +522,12 @@ namespace GameSirBatteryMonitor
                                     transport = "2.4GHz / USB";
                                 }
                             }
+                            else if (p.Contains("vid_045e&pid_028e"))
+                            {
+                                // GameSir Nova Lite connected directly to the PC via USB-C cable enumerates as VID_045E&PID_028E (Wired XInput)
+                                wiredUsbCableCount++;
+                                if (model == null) model = "GameSir Nova Lite";
+                            }
                             else if (p.Contains("bth") || p.Contains("bluetooth"))
                             {
                                 if (model == null) model = "GameSir Wireless";
@@ -532,46 +539,17 @@ namespace GameSirBatteryMonitor
                 finally { SetupDiDestroyDeviceInfoList(set); }
             }
 
-            int usbChargeCount = 0;
-            Guid hidGuid;
-            HidD_GetHidGuid(out hidGuid);
-            IntPtr hidSet = SetupDiGetClassDevs(ref hidGuid, IntPtr.Zero, IntPtr.Zero, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
-            if (hidSet != IntPtr.Zero && hidSet != new IntPtr(-1))
-            {
-                try
-                {
-                    SP_DEVICE_INTERFACE_DATA d = new SP_DEVICE_INTERFACE_DATA();
-                    d.cbSize = Marshal.SizeOf(d);
-                    for (uint i = 0; SetupDiEnumDeviceInterfaces(hidSet, IntPtr.Zero, ref hidGuid, i, ref d); i++)
-                    {
-                        SP_DEVICE_INTERFACE_DETAIL_DATA det = new SP_DEVICE_INTERFACE_DETAIL_DATA();
-                        det.cbSize = IntPtr.Size == 8 ? 8 : 6;
-                        int req;
-                        if (SetupDiGetDeviceInterfaceDetail(hidSet, ref d, ref det, Marshal.SizeOf(det), out req, IntPtr.Zero)
-                            && det.DevicePath != null)
-                        {
-                            string hp = det.DevicePath.ToLowerInvariant();
-                            // VID_3537&PID_2106 enumerates when the GameSir Nova Lite is plugged into the PC via USB-C cable
-                            if (hp.Contains("vid_3537&pid_2106"))
-                            {
-                                usbChargeCount++;
-                            }
-                        }
-                    }
-                }
-                finally { SetupDiDestroyDeviceInfoList(hidSet); }
-            }
             if (gamesirCount > 2)
             {
-                usbChargeCount = Math.Max(usbChargeCount, gamesirCount - 2);
+                wiredUsbCableCount += (gamesirCount - 2);
             }
 
             lock (_lock)
             {
                 _dongles = gamesirCount > 0 ? gamesirCount : totalXusb;
-                _usbChargingCables = usbChargeCount;
-                _detectedModel = model ?? "GameSir Controller";
-                _detectedTransport = transport ?? "XInput Wireless";
+                _usbChargingCables = wiredUsbCableCount;
+                _detectedModel = model ?? "GameSir Nova Lite";
+                _detectedTransport = transport ?? "Receptor 2.4GHz";
             }
         }
 
@@ -700,36 +678,46 @@ namespace GameSirBatteryMonitor
 
                     lock (_lock)
                     {
-                        // Auto-detect USB charging cable connection per controller
-                        // If a USB-C cable (PID_2106 or extra wired endpoint) is detected on the PC:
-                        // assign charging to a disconnected slot first (since plugging in USB-C disconnects 2.4G wireless),
-                        // or to the controller with lower battery if both are active.
+                        // Auto-detect USB charging cable connection on the PC ONLY for connected controllers:
+                        // When a controller is turned OFF (!slotConnected), the PC cannot know if it's simply off
+                        // or plugged into a wall outlet, so it must stay as "Desligado" (IsCharging = false).
+                        bool c0Conn = slotConnected[targetSlots[0]];
+                        bool c1Conn = slotConnected[targetSlots[1]];
+
                         if (_usbChargingCables >= 2)
                         {
-                            _ctl[0].IsCharging = true;
-                            _ctl[1].IsCharging = true;
+                            _ctl[0].IsCharging = c0Conn;
+                            _ctl[1].IsCharging = c1Conn;
                         }
                         else if (_usbChargingCables == 1)
                         {
-                            if (!slotConnected[targetSlots[0]] && slotConnected[targetSlots[1]])
+                            if (c0Conn && !c1Conn)
                             {
                                 _ctl[0].IsCharging = true;
                                 _ctl[1].IsCharging = false;
                             }
-                            else if (!slotConnected[targetSlots[1]] && slotConnected[targetSlots[0]])
+                            else if (c1Conn && !c0Conn)
                             {
                                 _ctl[0].IsCharging = false;
                                 _ctl[1].IsCharging = true;
                             }
-                            else if (_ctl[0].RemainingMah <= _ctl[1].RemainingMah)
+                            else if (c0Conn && c1Conn)
                             {
-                                _ctl[0].IsCharging = true;
-                                _ctl[1].IsCharging = false;
+                                if (_ctl[0].RemainingMah <= _ctl[1].RemainingMah)
+                                {
+                                    _ctl[0].IsCharging = true;
+                                    _ctl[1].IsCharging = false;
+                                }
+                                else
+                                {
+                                    _ctl[0].IsCharging = false;
+                                    _ctl[1].IsCharging = true;
+                                }
                             }
                             else
                             {
                                 _ctl[0].IsCharging = false;
-                                _ctl[1].IsCharging = true;
+                                _ctl[1].IsCharging = false;
                             }
                         }
                         else
@@ -748,6 +736,7 @@ namespace GameSirBatteryMonitor
                             c.LastTick = now;
 
                             bool nowConnected = slotConnected[hwSlot];
+                            bool justReconnected = nowConnected && !c.WasConnected;
                             if (nowConnected != c.WasConnected)
                             {
                                 stateTransitioned = true;
@@ -758,40 +747,9 @@ namespace GameSirBatteryMonitor
 
                             double prevPct = c.EstimatedPercent;
 
-                            // Handle Charging Simulation (works even if wireless receiver is off while charging on wall/USB)
-                            if (c.IsCharging)
-                            {
-                                // CC/CV Li-Ion 600mAh charging curve (~2h full charge: +300mA below 80%, +180mA 80-100%)
-                                double chargeMa = prevPct < 80.0 ? 300.0 : 180.0;
-                                c.CurrentDrawMa = (int)Math.Round(chargeMa);
-                                c.ActivityState = "Carregando ⚡";
-                                double addedMah = chargeMa * (dt / 3600.0);
-                                c.RemainingMah = Math.Min(ControllerStateData.BATTERY_CAPACITY_MAH, c.RemainingMah + addedMah);
-
-                                if (c.Connected)
-                                {
-                                    DynamicXInput.XINPUT_STATE stC = states[hwSlot];
-                                    c.Buttons = stC.wButtons;
-                                    c.LeftTrigger = stC.bLeftTrigger;
-                                    c.RightTrigger = stC.bRightTrigger;
-                                    c.ThumbLX = stC.sThumbLX;
-                                    c.ThumbLY = stC.sThumbLY;
-                                    c.ThumbRX = stC.sThumbRX;
-                                    c.ThumbRY = stC.sThumbRY;
-                                }
-                                else
-                                {
-                                    c.Buttons = 0; c.LeftTrigger = c.RightTrigger = 0;
-                                    c.ThumbLX = c.ThumbLY = c.ThumbRX = c.ThumbRY = 0;
-                                }
-
-                                double newPctC = c.EstimatedPercent;
-                                CheckBatteryPopups(c, prevPct, newPctC);
-                                continue;
-                            }
-
                             if (!c.Connected)
                             {
+                                c.IsCharging = false;
                                 c.InitializedPrev = false;
                                 c.Buttons = 0; c.LeftTrigger = c.RightTrigger = 0;
                                 c.ThumbLX = c.ThumbLY = c.ThumbRX = c.ThumbRY = 0;
@@ -815,12 +773,49 @@ namespace GameSirBatteryMonitor
                             DynamicXInput.XINPUT_BATTERY_INFORMATION bat = new DynamicXInput.XINPUT_BATTERY_INFORMATION();
                             if (DynamicXInput.GetBatteryInformation((uint)hwSlot, 0, ref bat) == 0)
                             {
+                                byte prevHwLevel = c.BatteryLevel;
                                 c.BatteryType = bat.BatteryType;
                                 c.BatteryLevel = bat.BatteryLevel;
 
-                                if (bat.BatteryLevel == 2 && c.EstimatedPercent > 65) c.EstimatedPercent = 65;
-                                else if (bat.BatteryLevel == 1 && c.EstimatedPercent > 30) c.EstimatedPercent = 30;
-                                else if (bat.BatteryLevel == 0 && c.EstimatedPercent > 8) c.EstimatedPercent = 8;
+                                // If the controller was turned off (e.g. charging in a wall outlet) and when turned back on
+                                // its hardware voltage tier jumped UP (e.g. from Low/Medium < 3 to Full == 3), sync to 100%!
+                                if (justReconnected && prevHwLevel > 0 && prevHwLevel < 3 && bat.BatteryLevel == 3 && c.EstimatedPercent <= 68.0)
+                                {
+                                    c.RemainingMah = ControllerStateData.BATTERY_CAPACITY_MAH;
+                                    c.ActivePlaySeconds = 0;
+                                    c.NotifiedLow15 = false;
+                                    PushNotification("✅ CONTROLE P" + (i + 1) + " RECARREGADO (100%)",
+                                        "O Controle P" + (i + 1) + " voltou ligado com bateria cheia (carregado na tomada)!",
+                                        ToolTipIcon.Info);
+                                }
+                                else if (!c.IsCharging)
+                                {
+                                    if (bat.BatteryLevel == 2 && c.EstimatedPercent > 65) c.EstimatedPercent = 65;
+                                    else if (bat.BatteryLevel == 1 && c.EstimatedPercent > 30) c.EstimatedPercent = 30;
+                                    else if (bat.BatteryLevel == 0 && c.EstimatedPercent > 8) c.EstimatedPercent = 8;
+                                }
+                            }
+
+                            // Handle USB-C Charging on PC
+                            if (c.IsCharging)
+                            {
+                                double chargeMa = prevPct < 80.0 ? 300.0 : 180.0;
+                                c.CurrentDrawMa = (int)Math.Round(chargeMa);
+                                c.ActivityState = "Carregando ⚡";
+                                c.ConnectionSubtitle = "Cabo USB-C · Slot XInput " + (hwSlot + 1);
+                                double addedMah = chargeMa * (dt / 3600.0);
+                                c.RemainingMah = Math.Min(ControllerStateData.BATTERY_CAPACITY_MAH, c.RemainingMah + addedMah);
+
+                                c.Buttons = st.wButtons;
+                                c.LeftTrigger = st.bLeftTrigger;
+                                c.RightTrigger = st.bRightTrigger;
+                                c.ThumbLX = st.sThumbLX;
+                                c.ThumbLY = st.sThumbLY;
+                                c.ThumbRX = st.sThumbRX;
+                                c.ThumbRY = st.sThumbRY;
+
+                                CheckBatteryPopups(c, prevPct, c.EstimatedPercent);
+                                continue;
                             }
 
                             string transportMode = (c.BatteryType == 2 || c.BatteryType == 3) ? "Sem Fio (XInput)" : _detectedTransport;
@@ -1008,8 +1003,11 @@ namespace GameSirBatteryMonitor
                     }
                     if (parts.Length > 3)
                     {
-                        _ctl[i].IsCharging = (parts[3] == "1");
+                        byte bLvl;
+                        if (byte.TryParse(parts[3], out bLvl))
+                            _ctl[i].BatteryLevel = bLvl;
                     }
+                    _ctl[i].IsCharging = false;
                 }
             }
             catch { }
@@ -1025,11 +1023,11 @@ namespace GameSirBatteryMonitor
                     a = _ctl[0].EstimatedPercent.ToString("F4", CultureInfo.InvariantCulture) + "|" +
                         _ctl[0].ActivePlaySeconds.ToString("F1", CultureInfo.InvariantCulture) + "|" +
                         _ctl[0].RemainingMah.ToString("F4", CultureInfo.InvariantCulture) + "|" +
-                        (_ctl[0].IsCharging ? "1" : "0");
+                        _ctl[0].BatteryLevel.ToString(CultureInfo.InvariantCulture);
                     b = _ctl[1].EstimatedPercent.ToString("F4", CultureInfo.InvariantCulture) + "|" +
                         _ctl[1].ActivePlaySeconds.ToString("F1", CultureInfo.InvariantCulture) + "|" +
                         _ctl[1].RemainingMah.ToString("F4", CultureInfo.InvariantCulture) + "|" +
-                        (_ctl[1].IsCharging ? "1" : "0");
+                        _ctl[1].BatteryLevel.ToString(CultureInfo.InvariantCulture);
                 }
                 string tmp = _stateFile + ".tmp";
                 File.WriteAllLines(tmp, new[] { a, b });
