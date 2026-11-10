@@ -18,8 +18,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCompany("GameSir Community")]
 [assembly: AssemblyProduct("GameSir Battery Hub")]
 [assembly: AssemblyCopyright("Copyright © 2026")]
-[assembly: AssemblyVersion("1.1.0.0")]
-[assembly: AssemblyFileVersion("1.1.0.0")]
+[assembly: AssemblyVersion("1.2.0.0")]
+[assembly: AssemblyFileVersion("1.2.0.0")]
 
 namespace GameSirBatteryMonitor
 {
@@ -31,16 +31,22 @@ namespace GameSirBatteryMonitor
         public int XInputSlot;
         public bool Connected;
         public bool WasConnected;
+        public bool IsCharging;
         public byte BatteryType;
         public byte BatteryLevel;
 
-        // Exact mAh remaining (persisted to disk continuously, never resets unless user clicks 100%)
+        // Exact mAh remaining (persisted to disk continuously, never resets unless user clicks 100% or finishes charging)
         public double RemainingMah = 600.0;
         public double EstimatedPercent
         {
             get { return Math.Max(0.5, Math.Min(100.0, (RemainingMah / BATTERY_CAPACITY_MAH) * 100.0)); }
             set { RemainingMah = Math.Max(3.0, Math.Min(BATTERY_CAPACITY_MAH, (value / 100.0) * BATTERY_CAPACITY_MAH)); }
         }
+
+        // Notification threshold flags so popups trigger once per threshold crossing
+        public bool NotifiedLow15 = false;
+        public bool NotifiedCharge80 = false;
+        public bool NotifiedCharge100 = false;
 
         public uint PacketNumber;
         public ushort Buttons;
@@ -56,7 +62,7 @@ namespace GameSirBatteryMonitor
         public double IdleSeconds = 15.0; // Starts in Resting state until a real button/stick is touched
         public double RecentActionScore = 0.0; // Rolling intensity score (0..100)
         public int CurrentDrawMa = 11;
-        public string ActivityState = "Em Repouso"; // "Jogo Intenso", "Em Uso", "Em Repouso", "Hibernando", "Desligado"
+        public string ActivityState = "Em Repouso"; // "Carregando", "Carga Completa", "Jogo Intenso", "Em Uso", "Em Repouso", "Hibernando", "Desligado"
         public DateTime VibrateUntil = DateTime.MinValue;
 
         public string ModelName = "GameSir Nova Lite";
@@ -202,6 +208,8 @@ namespace GameSirBatteryMonitor
         static string _baseDir, _stateFile;
         static TcpListener _listener;
         static volatile bool _running = true;
+        static Program _instance;
+        static List<string> _pendingAlerts = new List<string>();
 
         NotifyIcon _tray;
         MenuItem _autoStartMenuItem;
@@ -224,7 +232,6 @@ namespace GameSirBatteryMonitor
             }
             catch
             {
-                // Already running in background! Just open the UI window and exit this second process
                 if (!background) OpenAppWindow();
                 return;
             }
@@ -235,7 +242,6 @@ namespace GameSirBatteryMonitor
             }
             LoadState();
 
-            // Enable auto-start with Windows on first run if not set yet
             string firstRunFlag = Path.Combine(appDataFolder, "autostart_initialized.flag");
             if (!File.Exists(firstRunFlag))
             {
@@ -247,7 +253,6 @@ namespace GameSirBatteryMonitor
                 catch { }
             }
 
-            // Guarantee state is saved on process exit or Windows shutdown/restart
             Application.ApplicationExit += (s, e) => SaveState();
             try
             {
@@ -261,12 +266,16 @@ namespace GameSirBatteryMonitor
 
         public Program(bool openWindow)
         {
+            _instance = this;
             ContextMenu menu = new ContextMenu();
             menu.MenuItems.Add("Abrir Painel GameSir Battery Hub", (s, e) => OpenAppWindow());
+            menu.MenuItems.Add("Calibrar Controles no Windows (joy.cpl)", (s, e) => OpenWindowsCalibration());
             menu.MenuItems.Add("-");
             menu.MenuItems.Add("Vibrar Controle P1", (s, e) => Vibrate(0));
             menu.MenuItems.Add("Vibrar Controle P2", (s, e) => Vibrate(1));
             menu.MenuItems.Add("-");
+            menu.MenuItems.Add("Alternar Modo Carregando P1", (s, e) => ToggleCharging(0));
+            menu.MenuItems.Add("Alternar Modo Carregando P2", (s, e) => ToggleCharging(1));
             menu.MenuItems.Add("Marcar P1 como 100% Carregado", (s, e) => SetBattery(0, 100));
             menu.MenuItems.Add("Marcar P2 como 100% Carregado", (s, e) => SetBattery(1, 100));
             menu.MenuItems.Add("-");
@@ -297,6 +306,7 @@ namespace GameSirBatteryMonitor
                 Visible = true
             };
             _tray.DoubleClick += (s, e) => OpenAppWindow();
+            _tray.BalloonTipClicked += (s, e) => OpenAppWindow();
             _tray.MouseUp += (s, e) =>
             {
                 if (e.Button == MouseButtons.Left) OpenAppWindow();
@@ -314,6 +324,38 @@ namespace GameSirBatteryMonitor
             {
                 OpenAppWindow();
             }
+        }
+
+        public static void PushNotification(string title, string message, ToolTipIcon iconType)
+        {
+            lock (_lock)
+            {
+                string alertJson = "{\"title\":\"" + EscapeJson(title) + "\",\"message\":\"" + EscapeJson(message) + "\",\"level\":\"" + (iconType == ToolTipIcon.Warning ? "warn" : "info") + "\"}";
+                _pendingAlerts.Add(alertJson);
+                if (_pendingAlerts.Count > 10) _pendingAlerts.RemoveAt(0);
+            }
+            try
+            {
+                if (_instance != null && _instance._tray != null)
+                {
+                    _instance._tray.ShowBalloonTip(6000, title, message, iconType);
+                }
+            }
+            catch { }
+        }
+
+        public static void OpenWindowsCalibration()
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "control.exe",
+                    Arguments = "joy.cpl",
+                    UseShellExecute = true
+                });
+            }
+            catch { }
         }
 
         private static bool IsAutoStartEnabled()
@@ -368,7 +410,7 @@ namespace GameSirBatteryMonitor
                     Process.Start(new ProcessStartInfo
                     {
                         FileName = b,
-                        Arguments = "--app=" + url + " --user-data-dir=\"" + profile + "\" --window-size=1320,920 --disable-background-mode --disable-extensions --no-first-run --no-default-browser-check",
+                        Arguments = "--app=" + url + " --user-data-dir=\"" + profile + "\" --window-size=1360,940 --disable-background-mode --disable-extensions --no-first-run --no-default-browser-check",
                         UseShellExecute = false
                     });
                     return;
@@ -385,9 +427,10 @@ namespace GameSirBatteryMonitor
             {
                 p0 = (int)Math.Floor(_ctl[0].EstimatedPercent + 0.001);
                 p1 = (int)Math.Floor(_ctl[1].EstimatedPercent + 0.001);
-                c0 = _ctl[0].Connected; c1 = _ctl[1].Connected;
-                s0 = c0 ? (_ctl[0].EstimatedPercent.ToString("F1", CultureInfo.InvariantCulture) + "% (" + _ctl[0].ActivityState + ")") : (_ctl[0].EstimatedPercent.ToString("F0", CultureInfo.InvariantCulture) + "% (Off)");
-                s1 = c1 ? (_ctl[1].EstimatedPercent.ToString("F1", CultureInfo.InvariantCulture) + "% (" + _ctl[1].ActivityState + ")") : (_ctl[1].EstimatedPercent.ToString("F0", CultureInfo.InvariantCulture) + "% (Off)");
+                c0 = _ctl[0].Connected || _ctl[0].IsCharging;
+                c1 = _ctl[1].Connected || _ctl[1].IsCharging;
+                s0 = _ctl[0].EstimatedPercent.ToString("F1", CultureInfo.InvariantCulture) + "% (" + _ctl[0].ActivityState + ")";
+                s1 = _ctl[1].EstimatedPercent.ToString("F1", CultureInfo.InvariantCulture) + "% (" + _ctl[1].ActivityState + ")";
             }
             string txt = "P1: " + s0 + " | P2: " + s1;
             if (txt.Length > 63) txt = txt.Substring(0, 63);
@@ -525,6 +568,49 @@ namespace GameSirBatteryMonitor
             return buttonsPressed || triggersActive || stickDeflected || stickMoved;
         }
 
+        static void CheckBatteryPopups(ControllerStateData c, double prevPct, double newPct)
+        {
+            string pTag = "CONTROLE P" + (c.CardIndex + 1);
+            if (c.IsCharging)
+            {
+                c.NotifiedLow15 = false;
+                if (!c.NotifiedCharge80 && prevPct < 80.0 && newPct >= 80.0 && newPct < 99.5)
+                {
+                    c.NotifiedCharge80 = true;
+                    PushNotification("⚡ " + pTag + " ATINGIU 80% DE CARGA",
+                        "O " + pTag + " já está com 80% de bateria (carga rápida concluída, pronto para jogar)!",
+                        ToolTipIcon.Info);
+                }
+                if (!c.NotifiedCharge100 && newPct >= 99.95)
+                {
+                    c.NotifiedCharge100 = true;
+                    c.IsCharging = false;
+                    c.RemainingMah = ControllerStateData.BATTERY_CAPACITY_MAH;
+                    c.ActivePlaySeconds = 0;
+                    PushNotification("✅ " + pTag + " 100% CARREGADO!",
+                        "Bateria do " + pTag + " atingiu 100% (600 mAh). Você já pode desconectar o cabo carregador!",
+                        ToolTipIcon.Info);
+                }
+            }
+            else
+            {
+                if (newPct < 78.0) c.NotifiedCharge80 = false;
+                if (newPct < 98.0) c.NotifiedCharge100 = false;
+
+                if (!c.NotifiedLow15 && newPct <= 15.0)
+                {
+                    c.NotifiedLow15 = true;
+                    PushNotification("⚠️ BATERIA FRACA — " + pTag + " (" + newPct.ToString("F1", CultureInfo.InvariantCulture) + "%)",
+                        "A bateria do " + pTag + " está abaixo de 15%! Conecte o cabo USB-C e ative o modo Carregando.",
+                        ToolTipIcon.Warning);
+                }
+                else if (newPct > 18.0)
+                {
+                    c.NotifiedLow15 = false;
+                }
+            }
+        }
+
         static void PollLoop()
         {
             int tick = 0;
@@ -592,6 +678,40 @@ namespace GameSirBatteryMonitor
                             c.Connected = nowConnected;
                             c.ModelName = _detectedModel;
 
+                            double prevPct = c.EstimatedPercent;
+
+                            // Handle Charging Simulation (works even if wireless receiver is off while charging on wall/USB)
+                            if (c.IsCharging)
+                            {
+                                // CC/CV Li-Ion 600mAh charging curve (~2h full charge: +300mA below 80%, +180mA 80-100%)
+                                double chargeMa = prevPct < 80.0 ? 300.0 : 180.0;
+                                c.CurrentDrawMa = (int)Math.Round(chargeMa);
+                                c.ActivityState = "Carregando ⚡";
+                                double addedMah = chargeMa * (dt / 3600.0);
+                                c.RemainingMah = Math.Min(ControllerStateData.BATTERY_CAPACITY_MAH, c.RemainingMah + addedMah);
+
+                                if (c.Connected)
+                                {
+                                    DynamicXInput.XINPUT_STATE stC = states[hwSlot];
+                                    c.Buttons = stC.wButtons;
+                                    c.LeftTrigger = stC.bLeftTrigger;
+                                    c.RightTrigger = stC.bRightTrigger;
+                                    c.ThumbLX = stC.sThumbLX;
+                                    c.ThumbLY = stC.sThumbLY;
+                                    c.ThumbRX = stC.sThumbRX;
+                                    c.ThumbRY = stC.sThumbRY;
+                                }
+                                else
+                                {
+                                    c.Buttons = 0; c.LeftTrigger = c.RightTrigger = 0;
+                                    c.ThumbLX = c.ThumbLY = c.ThumbRX = c.ThumbRY = 0;
+                                }
+
+                                double newPctC = c.EstimatedPercent;
+                                CheckBatteryPopups(c, prevPct, newPctC);
+                                continue;
+                            }
+
                             if (!c.Connected)
                             {
                                 c.InitializedPrev = false;
@@ -620,7 +740,6 @@ namespace GameSirBatteryMonitor
                                 c.BatteryType = bat.BatteryType;
                                 c.BatteryLevel = bat.BatteryLevel;
 
-                                // Only clamp downward if hardware reports a lower discrete threshold; NEVER reset upward automatically!
                                 if (bat.BatteryLevel == 2 && c.EstimatedPercent > 65) c.EstimatedPercent = 65;
                                 else if (bat.BatteryLevel == 1 && c.EstimatedPercent > 30) c.EstimatedPercent = 30;
                                 else if (bat.BatteryLevel == 0 && c.EstimatedPercent > 8) c.EstimatedPercent = 8;
@@ -697,10 +816,11 @@ namespace GameSirBatteryMonitor
 
                             double consumedMah = drawMa * (dt / 3600.0);
                             c.RemainingMah = Math.Max(3.0, c.RemainingMah - consumedMah);
+
+                            CheckBatteryPopups(c, prevPct, c.EstimatedPercent);
                         }
                     }
 
-                    // Auto-save every 2 seconds (40 ticks) OR immediately on any state transition
                     if (stateTransitioned || (tick % 40 == 0))
                     {
                         SaveState();
@@ -709,6 +829,32 @@ namespace GameSirBatteryMonitor
                 }
                 catch { }
                 Thread.Sleep(50);
+            }
+        }
+
+        static void ToggleCharging(int slot)
+        {
+            if (slot < 0 || slot > 1) return;
+            bool nowCharging;
+            double pct;
+            lock (_lock)
+            {
+                ControllerStateData c = _ctl[slot];
+                c.IsCharging = !c.IsCharging;
+                nowCharging = c.IsCharging;
+                if (nowCharging && c.EstimatedPercent >= 99.9)
+                {
+                    // If already at 100%, allow charging or keep 100%
+                    c.NotifiedCharge100 = false;
+                }
+                pct = c.EstimatedPercent;
+            }
+            SaveState();
+            if (nowCharging)
+            {
+                PushNotification("⚡ CONTROLE P" + (slot + 1) + " CARREGANDO (" + pct.ToString("F1", CultureInfo.InvariantCulture) + "%)",
+                    "Modo de recarga ativado para o P" + (slot + 1) + ". Você receberá um alerta em 80% e em 100%!",
+                    ToolTipIcon.Info);
             }
         }
 
@@ -736,14 +882,24 @@ namespace GameSirBatteryMonitor
         static void SetBattery(int slot, double pct)
         {
             if (slot < 0 || slot > 1) return;
+            double prevPct;
             lock (_lock)
             {
-                _ctl[slot].EstimatedPercent = Math.Max(1, Math.Min(100, pct));
+                ControllerStateData c = _ctl[slot];
+                prevPct = c.EstimatedPercent;
+                c.EstimatedPercent = Math.Max(1, Math.Min(100, pct));
                 if (pct >= 99)
                 {
-                    _ctl[slot].ActivePlaySeconds = 0;
-                    _ctl[slot].IdleSeconds = 15.0;
+                    c.ActivePlaySeconds = 0;
+                    c.IdleSeconds = 15.0;
+                    c.IsCharging = false;
+                    c.NotifiedLow15 = false;
                 }
+                else if (pct <= 15)
+                {
+                    c.NotifiedLow15 = false;
+                }
+                CheckBatteryPopups(c, prevPct, c.EstimatedPercent);
             }
             SaveState();
         }
@@ -772,6 +928,10 @@ namespace GameSirBatteryMonitor
                         if (double.TryParse(parts[2], NumberStyles.Any, CultureInfo.InvariantCulture, out mah))
                             _ctl[i].RemainingMah = Math.Max(3.0, Math.Min(ControllerStateData.BATTERY_CAPACITY_MAH, mah));
                     }
+                    if (parts.Length > 3)
+                    {
+                        _ctl[i].IsCharging = (parts[3] == "1");
+                    }
                 }
             }
             catch { }
@@ -786,10 +946,12 @@ namespace GameSirBatteryMonitor
                 {
                     a = _ctl[0].EstimatedPercent.ToString("F4", CultureInfo.InvariantCulture) + "|" +
                         _ctl[0].ActivePlaySeconds.ToString("F1", CultureInfo.InvariantCulture) + "|" +
-                        _ctl[0].RemainingMah.ToString("F4", CultureInfo.InvariantCulture);
+                        _ctl[0].RemainingMah.ToString("F4", CultureInfo.InvariantCulture) + "|" +
+                        (_ctl[0].IsCharging ? "1" : "0");
                     b = _ctl[1].EstimatedPercent.ToString("F4", CultureInfo.InvariantCulture) + "|" +
                         _ctl[1].ActivePlaySeconds.ToString("F1", CultureInfo.InvariantCulture) + "|" +
-                        _ctl[1].RemainingMah.ToString("F4", CultureInfo.InvariantCulture);
+                        _ctl[1].RemainingMah.ToString("F4", CultureInfo.InvariantCulture) + "|" +
+                        (_ctl[1].IsCharging ? "1" : "0");
                 }
                 string tmp = _stateFile + ".tmp";
                 File.WriteAllLines(tmp, new[] { a, b });
@@ -833,6 +995,8 @@ namespace GameSirBatteryMonitor
                     if (path == "/api/status") { Send(ns, "200 OK", "application/json; charset=utf-8", Encoding.UTF8.GetBytes(StatusJson())); return; }
                     if (path == "/api/vibrate") { Vibrate(Q(url, "slot", 0)); Send(ns, "200 OK", "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}")); return; }
                     if (path == "/api/set-battery") { SetBattery(Q(url, "slot", 0), Q(url, "percent", 100)); Send(ns, "200 OK", "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}")); return; }
+                    if (path == "/api/toggle-charge") { ToggleCharging(Q(url, "slot", 0)); Send(ns, "200 OK", "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}")); return; }
+                    if (path == "/api/open-joycpl") { OpenWindowsCalibration(); Send(ns, "200 OK", "application/json", Encoding.UTF8.GetBytes("{\"ok\":true}")); return; }
                     if (path == "/api/toggle-autostart")
                     {
                         bool next = !IsAutoStartEnabled();
@@ -927,7 +1091,14 @@ namespace GameSirBatteryMonitor
             {
                 sb.Append("{\"dongleCount\":").Append(_dongles)
                   .Append(",\"autoStart\":").Append(autoStart ? "true" : "false")
-                  .Append(",\"controllers\":[");
+                  .Append(",\"alerts\":[");
+                for (int a = 0; a < _pendingAlerts.Count; a++)
+                {
+                    if (a > 0) sb.Append(',');
+                    sb.Append(_pendingAlerts[a]);
+                }
+                _pendingAlerts.Clear();
+                sb.Append("],\"controllers\":[");
                 for (int i = 0; i < 2; i++)
                 {
                     ControllerStateData c = _ctl[i];
@@ -935,6 +1106,7 @@ namespace GameSirBatteryMonitor
                     sb.Append("{\"slot\":").Append(i)
                       .Append(",\"xinputSlot\":").Append(c.XInputSlot)
                       .Append(",\"connected\":").Append(c.Connected ? "true" : "false")
+                      .Append(",\"isCharging\":").Append(c.IsCharging ? "true" : "false")
                       .Append(",\"modelName\":\"").Append(EscapeJson(c.ModelName)).Append("\"")
                       .Append(",\"connectionSubtitle\":\"").Append(EscapeJson(c.ConnectionSubtitle)).Append("\"")
                       .Append(",\"activityState\":\"").Append(EscapeJson(c.ActivityState)).Append("\"")

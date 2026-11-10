@@ -85,7 +85,8 @@
   .topbar {
     position: relative; z-index: 2;
     display: flex; align-items: center; justify-content: space-between;
-    padding: 22px 40px 6px;
+    padding: 20px 36px 6px;
+    flex-wrap: wrap; gap: 12px;
   }
   .brand { display: flex; align-items: center; gap: 14px; }
   .brand-mark {
@@ -95,17 +96,19 @@
     box-shadow: 0 10px 30px -8px rgba(99,102,241,.6);
   }
   .brand-mark svg { width: 24px; height: 24px; }
-  .brand h1 { font-size: 19px; font-weight: 700; letter-spacing: -.02em; }
-  .brand p { font-size: 12.5px; color: var(--txt-2); margin-top: 2px; }
+  .brand h1 { font-size: 19px; font-weight: 700; letter-spacing: .04em; }
+  .brand p { font-size: 12px; color: var(--txt-2); margin-top: 2px; }
 
-  .top-right { display: flex; align-items: center; gap: 12px; }
+  .top-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .chip {
     display: inline-flex; align-items: center; gap: 8px;
     height: 38px; padding: 0 14px; border-radius: 999px;
     background: var(--glass); border: 1px solid var(--line);
     backdrop-filter: blur(18px);
-    font-size: 12.5px; font-weight: 600; color: var(--txt-2);
+    font-size: 12px; font-weight: 700; color: var(--txt-2);
+    transition: border-color .2s, color .2s, transform .2s;
   }
+  button.chip:hover { border-color: var(--p1); color: var(--txt); transform: translateY(-1px); }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 rgba(52,211,153,.7); animation: ping 2s infinite; }
   .dot.off { background: var(--warn); animation: none; }
   @keyframes ping { 70% { box-shadow: 0 0 0 8px rgba(52,211,153,0); } 100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); } }
@@ -132,8 +135,8 @@
   /* ---------- Layout ---------- */
   main {
     position: relative; z-index: 1;
-    display: grid; grid-template-columns: 1fr 1fr; gap: 26px;
-    padding: 22px 40px 26px; max-width: 1500px; margin: 0 auto;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
+    padding: 18px 36px 24px; max-width: 1500px; margin: 0 auto;
   }
   @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
 
@@ -157,28 +160,33 @@
     -webkit-mask-composite: xor; mask-composite: exclude;
     opacity: .7; pointer-events: none;
   }
-  .player.offline { opacity: .72; }
-  .player.offline::before { opacity: .15; }
+  .player.offline { opacity: .76; }
+  .player.offline::before { opacity: .2; }
   .player.active { transform: translateY(-3px); }
 
   .player-head {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 24px 26px 0;
+    padding: 22px 26px 0;
   }
   .p-id { display: flex; align-items: center; gap: 14px; }
   .p-num {
-    font-size: 44px; font-weight: 800; line-height: 1; letter-spacing: -.04em;
+    font-size: 42px; font-weight: 800; line-height: 1;
     background: linear-gradient(135deg, var(--c1), var(--c2));
     -webkit-background-clip: text; background-clip: text; color: transparent;
   }
-  .p-name { font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
-  .p-sub { font-size: 12px; color: var(--txt-2); margin-top: 3px; }
+  .p-name { font-size: 16px; font-weight: 700; }
+  .p-sub { font-size: 11.5px; color: var(--txt-2); margin-top: 3px; }
 
   .status {
     display: inline-flex; align-items: center; gap: 8px;
     padding: 7px 13px; border-radius: 999px; font-size: 12px; font-weight: 700;
     background: color-mix(in srgb, var(--ok) 14%, transparent);
     color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent);
+  }
+  .status.charging {
+    background: color-mix(in srgb, #22c55e 22%, transparent);
+    color: #4ade80; border-color: #22c55e;
+    box-shadow: 0 0 20px -4px rgba(34,197,94,.55);
   }
   .status.resting {
     background: color-mix(in srgb, var(--p1) 14%, transparent);
@@ -193,36 +201,38 @@
   .status.off { background: var(--glass); color: var(--txt-3); border-color: var(--line); }
   .status.off .dot { background: var(--txt-3); animation: none; }
 
-  /* Stage: controller + ring */
+  /* ---------- Stage: controller + ring + live analog stick overlay ---------- */
   .stage {
-    position: relative; height: 330px; margin: 6px 18px 0;
+    position: relative; height: 310px; margin: 4px 18px 0;
     display: grid; place-items: center;
   }
   .stage-floor {
-    position: absolute; bottom: 26px; left: 50%; width: 62%; height: 46px; transform: translateX(-50%);
+    position: absolute; bottom: 22px; left: 50%; width: 62%; height: 44px; transform: translateX(-50%);
     background: radial-gradient(ellipse, color-mix(in srgb, var(--c1) 45%, transparent), transparent 70%);
     filter: blur(14px); opacity: .7; transition: opacity .3s;
   }
-  .ring { position: absolute; width: 300px; height: 300px; transform: rotate(-90deg); filter: drop-shadow(0 0 10px color-mix(in srgb, var(--c1) 55%, transparent)); }
+  .ring { position: absolute; width: 292px; height: 292px; transform: rotate(-90deg); filter: drop-shadow(0 0 10px color-mix(in srgb, var(--c1) 55%, transparent)); }
   .ring circle { fill: none; stroke-linecap: round; }
   .ring .track { stroke: var(--line-2); stroke-width: 2.4; stroke-dasharray: 1 3.2; }
-  .ring .seg { stroke-width: 3; transition: stroke-dashoffset 1s var(--ease), opacity .4s; }
+  .ring .seg { stroke-width: 3.2; transition: stroke-dashoffset .6s var(--ease), opacity .4s; }
+  .player.charging .ring { animation: pulse-ring 1.6s ease-in-out infinite; }
+  @keyframes pulse-ring { 50% { filter: drop-shadow(0 0 22px #22c55e); } }
 
   .controller-wrap {
-    position: relative; width: 380px; height: 300px;
+    position: relative; width: 350px; height: 265px;
     display: grid; place-items: center;
     animation: float 6s ease-in-out infinite;
   }
   .player.p2 .controller-wrap { animation-delay: -3s; }
-  @keyframes float { 50% { transform: translateY(-9px) rotate(-1deg); } }
+  @keyframes float { 50% { transform: translateY(-8px) rotate(-.8deg); } }
   .controller-img {
-    position: relative; width: 92%; height: auto;
-    filter: drop-shadow(0 26px 28px rgba(0,0,0,.5));
+    position: relative; width: 100%; height: 100%; object-fit: contain;
+    filter: drop-shadow(0 24px 26px rgba(0,0,0,.5));
     transition: filter .25s var(--ease), transform .25s var(--ease);
   }
-  [data-theme="light"] .controller-img { filter: drop-shadow(0 26px 26px rgba(30,41,80,.28)); }
+  [data-theme="light"] .controller-img { filter: drop-shadow(0 24px 24px rgba(30,41,80,.28)); }
   .controller-disc {
-    position: absolute; width: 300px; height: 300px; border-radius: 50%;
+    position: absolute; width: 280px; height: 280px; border-radius: 50%;
     background: radial-gradient(circle, color-mix(in srgb, var(--c1) 38%, transparent), transparent 68%);
     filter: blur(6px);
     transition: opacity .3s, transform .3s var(--ease);
@@ -230,65 +240,136 @@
   [data-theme="light"] .controller-disc { opacity: .7; }
   .player.active .controller-disc { transform: scale(1.12); }
   .player.offline .controller-disc { opacity: .15; }
-  .player.active .controller-img { transform: scale(1.03); filter: drop-shadow(0 0 26px color-mix(in srgb, var(--c1) 65%, transparent)) drop-shadow(0 26px 28px rgba(0,0,0,.45)); }
-  .player.offline .controller-img { filter: grayscale(1) brightness(.6) drop-shadow(0 20px 20px rgba(0,0,0,.4)); }
+  .player.active .controller-img { transform: scale(1.02); filter: drop-shadow(0 0 24px color-mix(in srgb, var(--c1) 65%, transparent)) drop-shadow(0 24px 26px rgba(0,0,0,.45)); }
+  .player.offline .controller-img { filter: grayscale(1) brightness(.65) drop-shadow(0 20px 20px rgba(0,0,0,.4)); }
   .player.vibrating .controller-wrap { animation: shake .09s linear infinite; }
   @keyframes shake { 25% { transform: translate(-2px, 1px) rotate(-.6deg); } 75% { transform: translate(2px, -1px) rotate(.6deg); } }
 
-  /* Battery readout */
+  /* Live Analog Stick Overlays directly on the Controller Image */
+  .stick-overlay {
+    position: absolute;
+    width: 58px; height: 58px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    border: 1.5px dashed color-mix(in srgb, var(--c1) 45%, transparent);
+    background: radial-gradient(circle, rgba(0,0,0,.25), transparent 70%);
+    pointer-events: none;
+    display: grid; place-items: center;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .stick-overlay.ls-pos { left: 26.2%; top: 39.5%; }
+  .stick-overlay.rs-pos { left: 61.2%; top: 56.5%; }
+  .stick-overlay.deflected {
+    border-style: solid;
+    border-color: var(--c1);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--c1) 65%, transparent);
+  }
+  .stick-vector {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    overflow: visible;
+  }
+  .stick-cap {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, var(--c1), var(--c2));
+    border: 2px solid #fff;
+    box-shadow: 0 0 12px var(--c1);
+    opacity: .42;
+    transition: opacity .1s;
+    will-change: transform;
+  }
+  .stick-overlay.deflected .stick-cap,
+  .stick-overlay.pressed .stick-cap {
+    opacity: 1;
+    box-shadow: 0 0 18px var(--c1), 0 0 6px #fff;
+  }
+
+  /* ---------- Battery readout ---------- */
   .readout {
     display: flex; align-items: flex-end; justify-content: space-between; gap: 18px;
     padding: 0 26px;
   }
   .big {
-    font-size: 58px; font-weight: 700; letter-spacing: .02em; line-height: .95;
+    font-size: 56px; font-weight: 700; letter-spacing: .02em; line-height: .95;
     font-variant-numeric: tabular-nums;
     text-shadow: 0 0 22px color-mix(in srgb, var(--c1) 35%, transparent);
   }
-  .big small { font-size: 26px; font-weight: 700; color: var(--txt-2); margin-left: 2px; letter-spacing: .02em; }
+  .big small { font-size: 24px; font-weight: 700; color: var(--txt-2); margin-left: 2px; }
   .readout-label {
-    font-size: 13px; color: var(--txt-2); font-weight: 700;
-    text-transform: uppercase; letter-spacing: .14em; margin-bottom: 8px;
+    font-size: 12.5px; color: var(--txt-2); font-weight: 700;
+    letter-spacing: .14em; margin-bottom: 6px;
   }
   .retro-line {
-    margin: 10px 26px 0;
-    font-size: 14px;
+    margin: 8px 26px 0;
+    font-size: 13.5px;
     letter-spacing: .1em;
     color: var(--txt);
-    opacity: .92;
+    display: flex; align-items: center; justify-content: space-between;
   }
   .level-badge {
     display: inline-flex; align-items: center; gap: 8px;
-    padding: 9px 14px; border-radius: 14px; font-weight: 700; font-size: 14px;
+    padding: 8px 13px; border-radius: 12px; font-weight: 700; font-size: 13px;
     background: color-mix(in srgb, var(--lvl, var(--ok)) 14%, transparent);
     color: var(--lvl, var(--ok));
     border: 1px solid color-mix(in srgb, var(--lvl, var(--ok)) 28%, transparent);
     white-space: nowrap;
   }
-  .bars { display: flex; gap: 6px; margin: 18px 26px 0; }
+  .bars { display: flex; gap: 6px; margin: 14px 26px 0; }
   .bars span {
     flex: 1; height: 10px; border-radius: 999px; background: var(--line);
     transition: background .5s var(--ease), box-shadow .5s;
   }
   .bars span.on { background: var(--lvl, var(--ok)); box-shadow: 0 0 14px -2px var(--lvl, var(--ok)); }
 
-  /* Stats */
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 20px 26px 0; }
+  /* ---------- Stats ---------- */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin: 16px 26px 0; }
   @media (max-width: 620px) { .stats { grid-template-columns: repeat(2, 1fr); } }
   .stat {
-    padding: 12px 13px; border-radius: 16px;
+    padding: 11px 12px; border-radius: 14px;
     background: var(--glass); border: 1px solid var(--line);
   }
-  .stat-k { font-size: 10.5px; color: var(--txt-3); font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
-  .stat-v { font-size: 14.5px; font-weight: 700; margin-top: 5px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .stat-sub { font-size: 11px; color: var(--txt-2); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .stat-k { font-size: 10px; color: var(--txt-3); font-weight: 700; letter-spacing: .07em; }
+  .stat-v { font-size: 14px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stat-sub { font-size: 10.5px; color: var(--txt-2); margin-top: 2px; font-variant-numeric: tabular-nums; }
 
-  /* Live input */
-  .inputs { display: flex; flex-wrap: wrap; gap: 6px; margin: 16px 26px 0; }
+  /* ---------- Live Sticks Mini Radar + Buttons ---------- */
+  .telemetry-bar {
+    display: flex; align-items: center; gap: 14px;
+    margin: 14px 26px 0;
+  }
+  .mini-radars {
+    display: flex; gap: 10px; flex-shrink: 0;
+  }
+  .radar-box {
+    display: flex; align-items: center; gap: 7px;
+    padding: 6px 9px; border-radius: 12px;
+    background: var(--glass); border: 1px solid var(--line);
+  }
+  .radar-circle {
+    position: relative; width: 34px; height: 34px; border-radius: 50%;
+    border: 1.5px solid var(--line-2);
+    background: rgba(0,0,0,.2);
+  }
+  .radar-circle::before, .radar-circle::after {
+    content: ""; position: absolute; background: var(--line);
+  }
+  .radar-circle::before { left: 50%; top: 2px; bottom: 2px; width: 1px; transform: translateX(-50%); }
+  .radar-circle::after { top: 50%; left: 2px; right: 2px; height: 1px; transform: translateY(-50%); }
+  .radar-dot {
+    position: absolute; left: 50%; top: 50%;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--c1);
+    box-shadow: 0 0 8px var(--c1);
+    transform: translate(-50%, -50%);
+    will-change: transform;
+  }
+  .radar-meta { font-size: 10px; line-height: 1.25; color: var(--txt-2); min-width: 52px; }
+  .radar-meta strong { display: block; color: var(--txt); font-size: 11px; }
+
+  .inputs { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; }
   .key {
-    min-width: 34px; height: 30px; padding: 0 9px; border-radius: 9px;
+    min-width: 30px; height: 27px; padding: 0 7px; border-radius: 8px;
     display: grid; place-items: center;
-    font-size: 11.5px; font-weight: 700; color: var(--txt-3);
+    font-size: 11px; font-weight: 700; color: var(--txt-3);
     background: var(--glass); border: 1px solid var(--line);
     transition: all .08s;
   }
@@ -303,27 +384,33 @@
   .key[data-k="X"].on { background: #3b82f6; box-shadow: 0 6px 18px -4px #3b82f6; }
   .key[data-k="Y"].on { background: #eab308; box-shadow: 0 6px 18px -4px #eab308; }
 
-  /* Actions */
-  .actions { display: flex; gap: 10px; padding: 20px 26px 24px; }
+  /* ---------- Actions ---------- */
+  .actions { display: flex; gap: 9px; padding: 18px 26px 22px; flex-wrap: wrap; }
   .btn {
-    height: 46px; border-radius: 14px; border: 1px solid var(--line-2);
+    height: 44px; border-radius: 13px; border: 1px solid var(--line-2);
     background: var(--glass); color: var(--txt); cursor: pointer;
-    font: inherit; font-size: 13.5px; font-weight: 700;
-    display: inline-flex; align-items: center; justify-content: center; gap: 9px;
-    padding: 0 16px; transition: transform .2s var(--ease), box-shadow .3s, background .3s, opacity .3s;
+    font: inherit; font-size: 12.5px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 0 14px; transition: transform .2s var(--ease), box-shadow .3s, background .3s, border-color .3s, opacity .3s;
   }
-  .btn:hover:not(:disabled) { transform: translateY(-2px); }
+  .btn:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--c1); }
   .btn:active:not(:disabled) { transform: translateY(0) scale(.98); }
   .btn:disabled { opacity: .4; cursor: not-allowed; }
-  .btn svg { width: 17px; height: 17px; }
+  .btn svg { width: 16px; height: 16px; }
   .btn.primary {
     flex: 1; border: 0; color: #fff;
     background: linear-gradient(135deg, var(--c1), var(--c2));
     box-shadow: 0 12px 30px -12px color-mix(in srgb, var(--c1) 90%, transparent);
   }
+  .btn.charge-active {
+    background: rgba(34,197,94,.2);
+    border-color: #22c55e;
+    color: #4ade80;
+    box-shadow: 0 0 18px -4px rgba(34,197,94,.5);
+  }
   .menu-wrap { position: relative; }
   .menu {
-    position: absolute; bottom: 54px; right: 0; min-width: 220px;
+    position: absolute; bottom: 52px; right: 0; min-width: 230px;
     padding: 8px; border-radius: 16px;
     background: var(--bg-2); border: 1px solid var(--line-2);
     box-shadow: 0 24px 60px -20px rgba(0,0,0,.6);
@@ -331,24 +418,77 @@
     transition: all .25s var(--ease); z-index: 10;
   }
   .menu.open { opacity: 1; transform: none; pointer-events: auto; }
-  .menu-title { font-size: 11px; color: var(--txt-3); font-weight: 700; text-transform: uppercase; letter-spacing: .1em; padding: 6px 10px 8px; }
+  .menu-title { font-size: 11px; color: var(--txt-3); font-weight: 700; letter-spacing: .1em; padding: 6px 10px 8px; }
   .menu button {
     width: 100%; text-align: left; border: 0; background: none; color: var(--txt);
-    font: inherit; font-size: 13px; font-weight: 600; padding: 10px 10px; border-radius: 10px; cursor: pointer;
+    font: inherit; font-size: 12.5px; font-weight: 700; padding: 9px 10px; border-radius: 10px; cursor: pointer;
     display: flex; justify-content: space-between;
   }
   .menu button:hover { background: var(--glass-2); }
-  .menu button span { color: var(--txt-3); font-weight: 500; }
+  .menu button span { color: var(--txt-2); }
 
   footer {
     position: relative; z-index: 1; text-align: center;
-    font-size: 12px; color: var(--txt-3); padding: 0 40px 22px;
+    font-size: 11.5px; color: var(--txt-3); padding: 0 36px 20px;
+  }
+
+  /* ---------- Alert Popup Banner (15% / 80% / 100%) ---------- */
+  .alert-popup {
+    position: fixed; top: 24px; left: 50%; transform: translate(-50%, -140%);
+    z-index: 100; min-width: 380px; max-width: 580px;
+    background: var(--bg-2); border: 2px solid var(--p1);
+    border-radius: 18px; padding: 16px 20px;
+    box-shadow: 0 25px 70px rgba(0,0,0,.75), 0 0 30px color-mix(in srgb, var(--p1) 40%, transparent);
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    transition: transform .45s var(--ease);
+  }
+  .alert-popup.show { transform: translate(-50%, 0); }
+  .alert-popup.warn { border-color: var(--bad); box-shadow: 0 25px 70px rgba(0,0,0,.75), 0 0 35px rgba(248,113,113,.5); }
+  .alert-title { font-size: 15px; font-weight: 700; color: var(--txt); }
+  .alert-msg { font-size: 12px; color: var(--txt-2); margin-top: 4px; }
+  .alert-close {
+    border: 1px solid var(--line-2); background: var(--glass); color: var(--txt);
+    padding: 8px 12px; border-radius: 10px; cursor: pointer; font-weight: 700;
+  }
+
+  /* ---------- Calibration Modal ---------- */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.72);
+    backdrop-filter: blur(10px); z-index: 80;
+    display: none; place-items: center; padding: 20px;
+  }
+  .modal-backdrop.open { display: grid; }
+  .modal-card {
+    width: 100%; max-width: 680px;
+    background: var(--bg-2); border: 1px solid var(--line-2);
+    border-radius: 24px; padding: 24px 28px;
+    box-shadow: 0 30px 90px rgba(0,0,0,.8);
+  }
+  .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+  .modal-head h2 { font-size: 18px; }
+  .cal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+  .cal-stick-card {
+    background: var(--glass); border: 1px solid var(--line);
+    border-radius: 16px; padding: 16px; text-align: center;
+  }
+  .cal-canvas {
+    width: 170px; height: 170px; border-radius: 50%;
+    border: 2px solid var(--p1); margin: 10px auto;
+    position: relative; background: rgba(0,0,0,.3);
+  }
+  .cal-canvas::before, .cal-canvas::after { content: ""; position: absolute; background: var(--line-2); }
+  .cal-canvas::before { left: 50%; top: 0; bottom: 0; width: 1px; }
+  .cal-canvas::after { top: 50%; left: 0; right: 0; height: 1px; }
+  .cal-dot {
+    position: absolute; left: 50%; top: 50%; width: 14px; height: 14px;
+    border-radius: 50%; background: var(--p1); border: 2px solid #fff;
+    transform: translate(-50%, -50%); box-shadow: 0 0 12px var(--p1);
   }
 
   /* Toast */
   .toast {
     position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 20px);
-    padding: 12px 18px; border-radius: 14px; font-size: 13px; font-weight: 600;
+    padding: 12px 18px; border-radius: 14px; font-size: 13px; font-weight: 700;
     background: var(--bg-2); border: 1px solid var(--line-2); color: var(--txt);
     box-shadow: 0 20px 50px -20px rgba(0,0,0,.6);
     opacity: 0; transition: all .35s var(--ease); z-index: 50; pointer-events: none;
@@ -363,22 +503,34 @@
     <div class="grid-bg"></div>
   </div>
 
+  <!-- Battery Popup Alert (<15%, 80%, 100%) -->
+  <div class="alert-popup" id="alert-popup">
+    <div>
+      <div class="alert-title" id="alert-title">⚡ AVISO DE BATERIA</div>
+      <div class="alert-msg" id="alert-msg">REMAINING BATTERY ALERT</div>
+    </div>
+    <button class="alert-close" onclick="closeAlertPopup()">OK</button>
+  </div>
+
   <header class="topbar">
     <div class="brand">
       <div class="brand-mark">
         <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M6 11h4M8 9v4"/><circle cx="15.5" cy="10.5" r=".6" fill="#fff"/><circle cx="17.5" cy="12.5" r=".6" fill="#fff"/><path d="M17.3 5H6.7a4 4 0 0 0-3.95 3.4L2 14.5A3 3 0 0 0 7.2 17l1.6-2h6.4l1.6 2a3 3 0 0 0 5.2-2.5l-.75-6.1A4 4 0 0 0 17.3 5z"/></svg>
       </div>
       <div>
-        <h1>GameSir Battery Hub</h1>
-        <p>Seus dois controles, lado a lado, em tempo real</p>
+        <h1>GAMESIR BATTERY HUB</h1>
+        <p>MONITORAMENTO DUPLO EM TEMPO REAL · P1 &amp; P2</p>
       </div>
     </div>
     <div class="top-right">
-      <button class="chip" id="autostart-btn" onclick="toggleAutoStart()" style="cursor:pointer" title="Clique para ativar/desativar inicialização automática com o Windows">
-        <span class="dot" id="autostart-dot"></span>
-        <span id="autostart-text">2º Plano + Auto-Start: Ativo</span>
+      <button class="chip" onclick="openCalibrationModal(0)" style="cursor:pointer" title="Testar e calibrar analógicos ou abrir o calibrador nativo do Windows (joy.cpl)">
+        🎯 CALIBRAR CONTROLES
       </button>
-      <div class="chip"><span class="dot" id="live-dot"></span><span id="live-text">Conectando…</span></div>
+      <button class="chip" id="autostart-btn" onclick="toggleAutoStart()" style="cursor:pointer" title="Ativar/desativar inicialização automática com o Windows">
+        <span class="dot" id="autostart-dot"></span>
+        <span id="autostart-text">2º PLANO + AUTO-START: ATIVO</span>
+      </button>
+      <div class="chip"><span class="dot" id="live-dot"></span><span id="live-text">CONECTANDO…</span></div>
       <div class="theme-toggle" role="group" aria-label="Tema">
         <div class="knob"></div>
         <button id="t-dark" title="Escuro" onclick="setTheme('dark')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
@@ -389,8 +541,38 @@
 
   <main id="players"></main>
 
-  <footer id="footer">Pode fechar esta janela (X) tranquilo: o app continua na bandeja do Windows (perto do relógio) salvando a bateria a cada 2s sem nunca resetar sozinho.</footer>
+  <footer id="footer">PODE FECHAR ESTA JANELA (X): O APP CONTINUA NA BANDEJA DO WINDOWS SALVANDO A BATERIA A CADA 2S E AVISANDO EM 15%, 80% E 100%.</footer>
   <div class="toast" id="toast"></div>
+
+  <!-- Calibration Modal (In-App + Windows Native joy.cpl) -->
+  <div class="modal-backdrop" id="cal-modal" onclick="if(event.target===this)closeCalibrationModal()">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="cal-modal-title">🎯 CALIBRAÇÃO E DIAGNÓSTICO DE EIXOS — P1</h2>
+        <button class="alert-close" onclick="closeCalibrationModal()">FECHAR</button>
+      </div>
+      <div style="display:flex;gap:10px;margin-bottom:14px;">
+        <button class="btn" id="cal-tab-0" onclick="openCalibrationModal(0)">CONTROLE P1</button>
+        <button class="btn" id="cal-tab-1" onclick="openCalibrationModal(1)">CONTROLE P2</button>
+        <button class="btn primary" onclick="openWindowsJoyCpl()">⚙️ ABRIR CALIBRADOR NATIVO DO WINDOWS (JOY.CPL)</button>
+      </div>
+      <div class="cal-grid">
+        <div class="cal-stick-card">
+          <div>ANALÓGICO ESQUERDO (L-STICK)</div>
+          <div class="cal-canvas"><div class="cal-dot" id="cal-dot-l"></div></div>
+          <div id="cal-txt-l" style="font-size:12px;color:var(--txt-2)">X: 0% · Y: 0%</div>
+        </div>
+        <div class="cal-stick-card">
+          <div>ANALÓGICO DIREITO (R-STICK)</div>
+          <div class="cal-canvas"><div class="cal-dot" id="cal-dot-r"></div></div>
+          <div id="cal-txt-r" style="font-size:12px;color:var(--txt-2)">X: 0% · Y: 0%</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--txt-2);line-height:1.5;">
+        DICA: GIRE OS DOIS ANALÓGICOS EM 360° PARA TESTAR O CENTRO E A CIRCULARIDADE, OU CLIQUE EM <strong>"ABRIR CALIBRADOR NATIVO DO WINDOWS (JOY.CPL)"</strong> ACIMA PARA CALIBRAR OS EIXOS DIRETAMENTE NO SISTEMA.
+      </div>
+    </div>
+  </div>
 
 <template id="tpl">
   <article class="player">
@@ -398,11 +580,11 @@
       <div class="p-id">
         <div class="p-num">P1</div>
         <div>
-          <div class="p-name">GameSir Nova Lite</div>
-          <div class="p-sub">Receptor 2.4GHz · Slot XInput 1</div>
+          <div class="p-name">GAMESIR NOVA LITE</div>
+          <div class="p-sub">RECEPTOR 2.4GHZ · SLOT XINPUT 1</div>
         </div>
       </div>
-      <div class="status"><span class="dot"></span><span class="status-t">Conectado</span></div>
+      <div class="status"><span class="dot"></span><span class="status-t">CONECTADO</span></div>
     </div>
 
     <div class="stage">
@@ -419,6 +601,19 @@
       <div class="controller-wrap">
         <div class="controller-disc"></div>
         <img class="controller-img" alt="Controle GameSir" draggable="false" />
+        <!-- Live Left & Right Analog Stick Direction Overlays -->
+        <div class="stick-overlay ls-pos">
+          <svg class="stick-vector" viewBox="-30 -30 60 60">
+            <line class="vec-line" x1="0" y1="0" x2="0" y2="0" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+          <div class="stick-cap"></div>
+        </div>
+        <div class="stick-overlay rs-pos">
+          <svg class="stick-vector" viewBox="-30 -30 60 60">
+            <line class="vec-line" x1="0" y1="0" x2="0" y2="0" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+          <div class="stick-cap"></div>
+        </div>
       </div>
     </div>
 
@@ -429,42 +624,62 @@
       </div>
       <div class="level-badge"><span class="lvl-t">—</span></div>
     </div>
-    <div class="retro-line">REMAINING BATTERY: <span class="pct-inline">--%</span></div>
+    <div class="retro-line">
+      <span>REMAINING BATTERY: <strong class="pct-inline">--%</strong></span>
+      <span class="charge-eta" style="color:var(--ok)"></span>
+    </div>
     <div class="bars"><span></span><span></span><span></span><span></span></div>
 
     <div class="stats">
-      <div class="stat"><div class="stat-k">Autonomia</div><div class="stat-v s-auto">—</div><div class="stat-sub s-mah">600 / 600 mAh</div></div>
-      <div class="stat"><div class="stat-k">Consumo Atual</div><div class="stat-v s-draw">—</div><div class="stat-sub s-mode">Aguardando</div></div>
-      <div class="stat"><div class="stat-k">Tempo em Uso</div><div class="stat-v s-sess">—</div><div class="stat-sub s-sess-sub">Só conta jogando</div></div>
-      <div class="stat"><div class="stat-k">Inatividade</div><div class="stat-v s-idle">—</div><div class="stat-sub s-trig">LT 0% · RT 0%</div></div>
+      <div class="stat"><div class="stat-k">AUTONOMIA</div><div class="stat-v s-auto">—</div><div class="stat-sub s-mah">600 / 600 MAH</div></div>
+      <div class="stat"><div class="stat-k">CONSUMO / CARGA</div><div class="stat-v s-draw">—</div><div class="stat-sub s-mode">AGUARDANDO</div></div>
+      <div class="stat"><div class="stat-k">TEMPO EM USO</div><div class="stat-v s-sess">—</div><div class="stat-sub s-sess-sub">SÓ CONTA JOGANDO</div></div>
+      <div class="stat"><div class="stat-k">INATIVIDADE</div><div class="stat-v s-idle">—</div><div class="stat-sub s-trig">LT 0% · RT 0%</div></div>
     </div>
 
-    <div class="inputs">
-      <div class="key" data-k="A">A</div><div class="key" data-k="B">B</div>
-      <div class="key" data-k="X">X</div><div class="key" data-k="Y">Y</div>
-      <div class="key" data-k="LB">LB</div><div class="key" data-k="RB">RB</div>
-      <div class="key" data-k="LT">LT</div><div class="key" data-k="RT">RT</div>
-      <div class="key" data-k="↑">↑</div><div class="key" data-k="↓">↓</div>
-      <div class="key" data-k="←">←</div><div class="key" data-k="→">→</div>
-      <div class="key" data-k="L3">L3</div><div class="key" data-k="R3">R3</div>
+    <div class="telemetry-bar">
+      <div class="mini-radars">
+        <div class="radar-box">
+          <div class="radar-circle"><div class="radar-dot r-dot-l"></div></div>
+          <div class="radar-meta"><strong>L-STICK</strong><span class="r-txt-l">0% · 0%</span></div>
+        </div>
+        <div class="radar-box">
+          <div class="radar-circle"><div class="radar-dot r-dot-r"></div></div>
+          <div class="radar-meta"><strong>R-STICK</strong><span class="r-txt-r">0% · 0%</span></div>
+        </div>
+      </div>
+      <div class="inputs">
+        <div class="key" data-k="A">A</div><div class="key" data-k="B">B</div>
+        <div class="key" data-k="X">X</div><div class="key" data-k="Y">Y</div>
+        <div class="key" data-k="LB">LB</div><div class="key" data-k="RB">RB</div>
+        <div class="key" data-k="LT">LT</div><div class="key" data-k="RT">RT</div>
+        <div class="key" data-k="↑">↑</div><div class="key" data-k="↓">↓</div>
+        <div class="key" data-k="←">←</div><div class="key" data-k="→">→</div>
+        <div class="key" data-k="L3">L3</div><div class="key" data-k="R3">R3</div>
+      </div>
     </div>
 
     <div class="actions">
       <button class="btn primary b-vib">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M3 8v8M21 8v8"/></svg>
-        Vibrar para identificar
+        VIBRAR
+      </button>
+      <button class="btn b-charge" title="Ative quando conectar o controle no cabo USB-C para acompanhar a recarga e receber avisos em 80% e 100%">
+        ⚡ CARREGANDO
+      </button>
+      <button class="btn b-joycpl" title="Abrir calibração e diagnóstico deste controle">
+        🎯 CALIBRAR
       </button>
       <div class="menu-wrap">
-        <button class="btn b-cal" title="Ajustar carga">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="7" width="17" height="10" rx="2"/><path d="M22 11v2M10 9l-2 3h4l-2 3"/></svg>
-          Ajustar
+        <button class="btn b-cal" title="Definir porcentagem atual da bateria">
+          AJUSTAR %
         </button>
         <div class="menu">
-          <div class="menu-title">Acabei de carregar até…</div>
-          <button data-p="100">Carga completa <span>100%</span></button>
-          <button data-p="75">Três quartos <span>75%</span></button>
-          <button data-p="50">Metade <span>50%</span></button>
-          <button data-p="25">Pouca carga <span>25%</span></button>
+          <div class="menu-title"> DEFINIR CARGA ATUAL…</div>
+          <button data-p="100">CARGA COMPLETA <span>100%</span></button>
+          <button data-p="80">CARGA RÁPIDA <span>80%</span></button>
+          <button data-p="50">METADE <span>50%</span></button>
+          <button data-p="15">TESTAR ALERTA BAIXA <span>15%</span></button>
         </div>
       </div>
     </div>
@@ -487,25 +702,17 @@
     [0x1000,'A'],[0x2000,'B'],[0x4000,'X'],[0x8000,'Y'],[0x0100,'LB'],[0x0200,'RB'],
     [0x0001,'↑'],[0x0002,'↓'],[0x0004,'←'],[0x0008,'→'],[0x0040,'L3'],[0x0080,'R3']
   ];
-  const FALLBACK = (c) => 'data:image/svg+xml;utf8,' + encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
-      <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2f3d"/><stop offset="1" stop-color="#11141c"/></linearGradient></defs>
-      <path d="M95 95h110c25 0 42 18 46 44l9 62c4 26-22 42-40 26l-26-25H106l-26 25c-18 16-44 0-40-26l9-62c4-26 21-44 46-44z" fill="url(#g)" stroke="#3a4152" stroke-width="2"/>
-      <circle cx="105" cy="140" r="20" fill="#0b0d13"/><circle cx="105" cy="140" r="13" fill="#2b3040"/>
-      <circle cx="180" cy="180" r="20" fill="#0b0d13"/><circle cx="180" cy="180" r="13" fill="#2b3040"/>
-      <circle cx="150" cy="118" r="8" fill="${c}"/>
-      <circle cx="200" cy="125" r="7" fill="#eab308"/><circle cx="200" cy="155" r="7" fill="#22c55e"/>
-      <circle cx="185" cy="140" r="7" fill="#3b82f6"/><circle cx="215" cy="140" r="7" fill="#ef4444"/>
-      <path d="M128 172h10v-10h10v10h10v10h-10v10h-10v-10h-10z" fill="#0b0d13"/>
-    </svg>`);
 
   const root = document.getElementById('players');
   const tpl = document.getElementById('tpl');
+  let calSelectedSlot = 0;
+  let latestControllers = [];
+
   const cards = [0, 1].map(slot => {
     const el = tpl.content.firstElementChild.cloneNode(true);
     el.classList.add(slot === 0 ? 'p1' : 'p2');
     el.querySelector('.p-num').textContent = 'P' + (slot + 1);
-    el.querySelector('.p-sub').textContent = 'Receptor 2.4GHz · Slot XInput ' + (slot + 1);
+    el.querySelector('.p-sub').textContent = 'RECEPTOR 2.4GHZ · SLOT XINPUT ' + (slot + 1);
 
     const gid = 'rg' + slot;
     const grad = el.querySelector('.ring-grad');
@@ -519,15 +726,22 @@
 
     const img = el.querySelector('.controller-img');
     img.src = `/img/p${slot + 1}.png`;
-    img.onerror = () => { img.onerror = null; img.src = FALLBACK(slot === 0 ? '#22d3ee' : '#f472b6'); };
 
     el.querySelector('.b-vib').onclick = () => vibrate(slot);
+    el.querySelector('.b-charge').onclick = () => toggleCharge(slot);
+    el.querySelector('.b-joycpl').onclick = () => openCalibrationModal(slot);
+
     const menu = el.querySelector('.menu');
     el.querySelector('.b-cal').onclick = (e) => { e.stopPropagation(); menu.classList.toggle('open'); };
     menu.querySelectorAll('button').forEach(b => b.onclick = () => {
       menu.classList.remove('open');
       setBattery(slot, +b.dataset.p);
     });
+
+    const lsOverlay = el.querySelector('.ls-pos');
+    const rsOverlay = el.querySelector('.rs-pos');
+    lsOverlay.style.color = slot === 0 ? '#22d3ee' : '#f472b6';
+    rsOverlay.style.color = slot === 0 ? '#22d3ee' : '#f472b6';
 
     root.appendChild(el);
     return {
@@ -536,6 +750,7 @@
       subEl: el.querySelector('.p-sub'),
       pct: el.querySelector('.pct'),
       pctInline: el.querySelector('.pct-inline'),
+      chargeEta: el.querySelector('.charge-eta'),
       lvl: el.querySelector('.level-badge'),
       lvlT: el.querySelector('.lvl-t'),
       bars: el.querySelectorAll('.bars span'),
@@ -549,25 +764,35 @@
       sessSub: el.querySelector('.s-sess-sub'),
       idle: el.querySelector('.s-idle'),
       trig: el.querySelector('.s-trig'),
+      lsOverlay, rsOverlay,
+      lsCap: lsOverlay.querySelector('.stick-cap'),
+      rsCap: rsOverlay.querySelector('.stick-cap'),
+      lsLine: lsOverlay.querySelector('.vec-line'),
+      rsLine: rsOverlay.querySelector('.vec-line'),
+      rDotL: el.querySelector('.r-dot-l'),
+      rDotR: el.querySelector('.r-dot-r'),
+      rTxtL: el.querySelector('.r-txt-l'),
+      rTxtR: el.querySelector('.r-txt-r'),
       keys: Object.fromEntries([...el.querySelectorAll('.key')].map(k => [k.dataset.k, k])),
       vib: el.querySelector('.b-vib'),
+      chargeBtn: el.querySelector('.b-charge'),
       shownPct: -1,
-      lastPacket: 0,
       activeUntil: 0
     };
   });
   document.addEventListener('click', () => document.querySelectorAll('.menu.open').forEach(m => m.classList.remove('open')));
 
   /* ---------- Render ---------- */
-  function levelInfo(pct) {
-    if (pct >= 70) return ['Carga alta', 'var(--ok)', 4];
-    if (pct >= 45) return ['Carga média', 'var(--ok)', 3];
-    if (pct >= 20) return ['Carga baixa', 'var(--warn)', 2];
-    return ['Recarregue', 'var(--bad)', 1];
+  function levelInfo(pct, isCharging) {
+    if (isCharging) return ['⚡ CARREGANDO', '#4ade80', Math.max(1, Math.ceil(pct / 25))];
+    if (pct >= 70) return ['CARGA ALTA', 'var(--ok)', 4];
+    if (pct >= 45) return ['CARGA MÉDIA', 'var(--ok)', 3];
+    if (pct >= 16) return ['CARGA BAIXA', 'var(--warn)', 2];
+    return ['⚠️ BATERIA CRÍTICA (<15%)', 'var(--bad)', 1];
   }
   function fmtTime(sec) {
     const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = Math.floor(sec % 60);
-    return h ? `${h}h ${String(m).padStart(2,'0')}m` : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    return h ? `${h}H ${String(m).padStart(2,'0')}M` : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
   }
   function animateNumber(card, target, exactVal) {
     const fmt = (v) => {
@@ -594,60 +819,161 @@
     requestAnimationFrame(step);
   }
 
+  function updateStickVisuals(card, c, on) {
+    const lx = on ? (c.thumbLX / 32767) : 0;
+    const ly = on ? -(c.thumbLY / 32767) : 0;
+    const rx = on ? (c.thumbRX / 32767) : 0;
+    const ry = on ? -(c.thumbRY / 32767) : 0;
+
+    const lMag = Math.hypot(lx, ly);
+    const rMag = Math.hypot(rx, ry);
+
+    // Move caps on controller image (radius up to 18px)
+    const lDx = (lx * 18).toFixed(1), lDy = (ly * 18).toFixed(1);
+    const rDx = (rx * 18).toFixed(1), rDy = (ry * 18).toFixed(1);
+    card.lsCap.style.transform = `translate(${lDx}px, ${lDy}px)`;
+    card.rsCap.style.transform = `translate(${rDx}px, ${rDy}px)`;
+
+    card.lsLine.setAttribute('x2', lDx);
+    card.lsLine.setAttribute('y2', lDy);
+    card.rsLine.setAttribute('x2', rDx);
+    card.rsLine.setAttribute('y2', rDy);
+
+    card.lsOverlay.classList.toggle('deflected', lMag > 0.14);
+    card.rsOverlay.classList.toggle('deflected', rMag > 0.14);
+    card.lsOverlay.classList.toggle('pressed', on && (c.buttons & 0x0040) !== 0);
+    card.rsOverlay.classList.toggle('pressed', on && (c.buttons & 0x0080) !== 0);
+
+    // Update 2D Mini Radar
+    card.rDotL.style.transform = `translate(calc(-50% + ${(lx * 12).toFixed(1)}px), calc(-50% + ${(ly * 12).toFixed(1)}px))`;
+    card.rDotR.style.transform = `translate(calc(-50% + ${(rx * 12).toFixed(1)}px), calc(-50% + ${(ry * 12).toFixed(1)}px))`;
+    card.rTxtL.textContent = `${Math.round(lx * 100)}% · ${Math.round(-ly * 100)}%`;
+    card.rTxtR.textContent = `${Math.round(rx * 100)}% · ${Math.round(-ry * 100)}%`;
+  }
+
   function render(card, c) {
     const on = c.connected;
+    const isCharging = !!c.isCharging;
     const now = performance.now();
     const moving = c.buttons || c.leftTrigger > 20 || c.rightTrigger > 20 ||
-      Math.abs(c.thumbLX) > 7000 || Math.abs(c.thumbLY) > 7000 || Math.abs(c.thumbRX) > 7000 || Math.abs(c.thumbRY) > 7000;
+      Math.abs(c.thumbLX) > 5000 || Math.abs(c.thumbLY) > 5000 || Math.abs(c.thumbRX) > 5000 || Math.abs(c.thumbRY) > 5000;
     if (on && moving) card.activeUntil = now + 350;
 
-    const state = c.activityState || (on ? 'Em Uso' : 'Desligado');
-    const isResting = on && state === 'Em Repouso';
-    const isSleeping = on && state === 'Hibernando';
+    const state = c.activityState || (on ? 'EM USO' : 'DESLIGADO');
+    const isResting = on && !isCharging && state === 'Em Repouso';
+    const isSleeping = on && !isCharging && state === 'Hibernando';
 
-    card.el.classList.toggle('offline', !on);
+    card.el.classList.toggle('offline', !on && !isCharging);
+    card.el.classList.toggle('charging', isCharging);
     card.el.classList.toggle('active', on && now < card.activeUntil);
-    card.status.className = 'status' + (!on ? ' off' : isSleeping ? ' sleeping' : isResting ? ' resting' : '');
-    card.statusT.textContent = !on ? 'Desligado (Salvo)' : isSleeping ? 'Hibernando (0 mA)' : isResting ? 'Em Repouso' : state;
+    card.status.className = 'status' + (isCharging ? ' charging' : !on ? ' off' : isSleeping ? ' sleeping' : isResting ? ' resting' : '');
+    card.statusT.textContent = isCharging ? '⚡ CARREGANDO' : !on ? 'DESLIGADO (SALVO)' : isSleeping ? 'HIBERNANDO (0 MA)' : isResting ? 'EM REPOUSO' : state;
     card.vib.disabled = !on;
+    card.chargeBtn.classList.toggle('charge-active', isCharging);
+    card.chargeBtn.textContent = isCharging ? '⚡ PARAR CARGA' : '⚡ CARREGANDO';
+
     if (c.modelName) card.nameEl.textContent = c.modelName;
     if (c.connectionSubtitle) card.subEl.textContent = c.connectionSubtitle;
 
-    // Even if controller is turned off, always display its last saved battery state!
     const exactPct = typeof c.batteryPercentExact === 'number' ? c.batteryPercentExact : (c.batteryPercent ?? 100);
     const pct = c.batteryPercent ?? Math.floor(exactPct);
-    const [label, color, cells] = levelInfo(pct);
-    card.el.style.setProperty('--lvl', on ? color : 'var(--txt-2)');
-    card.lvlT.textContent = on ? label : `${label} (Último estado)`;
+    const [label, color, cells] = levelInfo(pct, isCharging);
+    card.el.style.setProperty('--lvl', (on || isCharging) ? color : 'var(--txt-2)');
+    card.lvlT.textContent = (on || isCharging) ? label : `${label} (ÚLTIMO ESTADO)`;
     card.bars.forEach((b, i) => b.classList.toggle('on', i < cells));
     card.seg.style.strokeDashoffset = CIRC * (1 - exactPct / 100);
 
     animateNumber(card, pct, exactPct);
-    if (card.pctInline) {
-      card.pctInline.textContent = (exactPct >= 99.95 ? '100' : exactPct.toFixed(1).replace('.', ',')) + '%';
-    }
+    const fmtPct = (exactPct >= 99.95 ? '100' : exactPct.toFixed(1).replace('.', ',')) + '%';
+    if (card.pctInline) card.pctInline.textContent = fmtPct;
 
     const remMah = c.remainingMah ?? Math.round((exactPct / 100) * 600);
-    // Autonomy in gameplay (~75mA average active draw)
-    const estPlayHrs = remMah / 75;
-    card.auto.textContent = `~${Math.floor(estPlayHrs)}h ${String(Math.round((estPlayHrs % 1) * 60)).padStart(2,'0')}m`;
-    card.mah.textContent = `${remMah} / 600 mAh`;
+    if (isCharging) {
+      const missingMah = Math.max(0, 600 - remMah);
+      const minsToFull = Math.ceil((missingMah / 260) * 60);
+      card.chargeEta.textContent = minsToFull > 0 ? `⚡ +${c.currentDrawMa} MA · ~${minsToFull} MIN ATÉ 100%` : '⚡ 100% COMPLETO';
+    } else {
+      card.chargeEta.textContent = '';
+    }
 
-    const ma = on ? (c.currentDrawMa ?? 11) : 0;
-    card.draw.textContent = `${ma} mA`;
-    card.mode.textContent = !on ? 'Desligado (0%/h)' : isSleeping ? 'Auto-Sleep (0%/h)' : isResting ? 'Standby (~1.8%/h)' : 'Jogando (~12%/h)';
+    const estPlayHrs = remMah / 75;
+    card.auto.textContent = `~${Math.floor(estPlayHrs)}H ${String(Math.round((estPlayHrs % 1) * 60)).padStart(2,'0')}M`;
+    card.mah.textContent = `${remMah} / 600 MAH`;
+
+    const ma = (on || isCharging) ? (c.currentDrawMa ?? 11) : 0;
+    card.draw.textContent = isCharging ? `+${ma} MA` : `${ma} MA`;
+    card.mode.textContent = isCharging ? 'RECARGA USB-C' : !on ? 'DESLIGADO (0%/H)' : isSleeping ? 'AUTO-SLEEP (0%/H)' : isResting ? 'STANDBY (~1.8%/H)' : 'JOGANDO (~12%/H)';
 
     card.sess.textContent = fmtTime(c.sessionSeconds || 0);
-    card.sessSub.textContent = !on ? 'Salvo na memória' : (isResting || isSleeping) ? 'Pausado (parado)' : 'Contando em uso';
+    card.sessSub.textContent = isCharging ? 'RECARREGANDO' : !on ? 'SALVO NA MEMÓRIA' : (isResting || isSleeping) ? 'PAUSADO (PARADO)' : 'CONTANDO EM USO';
 
     const idleSec = c.idleSeconds || 0;
-    card.idle.textContent = !on ? 'Controle desligado' : idleSec < 12 ? 'Ativo agora' : fmtTime(idleSec);
+    card.idle.textContent = !on ? 'CONTROLE OFF' : idleSec < 12 ? 'ATIVO AGORA' : fmtTime(idleSec);
     const lt = Math.round(c.leftTrigger / 2.55), rt = Math.round(c.rightTrigger / 2.55);
-    card.trig.textContent = on ? `LT ${lt}% · RT ${rt}%` : 'Sem consumo (0 mA)';
+    card.trig.textContent = on ? `LT ${lt}% · RT ${rt}%` : 'SEM CONSUMO (0 MA)';
+
+    updateStickVisuals(card, c, on);
 
     for (const [mask, k] of BTN) card.keys[k].classList.toggle('on', on && (c.buttons & mask) !== 0);
     card.keys.LT.classList.toggle('on', on && c.leftTrigger > 20);
     card.keys.RT.classList.toggle('on', on && c.rightTrigger > 20);
+  }
+
+  /* ---------- Alert Popup (<15%, 80%, 100%) ---------- */
+  function showAlertPopup(title, message, level) {
+    const pop = document.getElementById('alert-popup');
+    document.getElementById('alert-title').textContent = title;
+    document.getElementById('alert-msg').textContent = message;
+    pop.classList.toggle('warn', level === 'warn');
+    pop.classList.add('show');
+    // Subtle retro beep via Web Audio API
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = level === 'warn' ? 440 : 880;
+      gain.gain.value = 0.06;
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + 0.18);
+    } catch {}
+    clearTimeout(pop._timer);
+    pop._timer = setTimeout(() => pop.classList.remove('show'), 9000);
+  }
+  function closeAlertPopup() {
+    document.getElementById('alert-popup').classList.remove('show');
+  }
+
+  /* ---------- Calibration Modal ---------- */
+  function openCalibrationModal(slot) {
+    calSelectedSlot = slot || 0;
+    document.getElementById('cal-modal-title').textContent = `🎯 CALIBRAÇÃO E DIAGNÓSTICO DE EIXOS — P${calSelectedSlot + 1}`;
+    document.getElementById('cal-tab-0').classList.toggle('charge-active', calSelectedSlot === 0);
+    document.getElementById('cal-tab-1').classList.toggle('charge-active', calSelectedSlot === 1);
+    document.getElementById('cal-modal').classList.add('open');
+  }
+  function closeCalibrationModal() {
+    document.getElementById('cal-modal').classList.remove('open');
+  }
+  async function openWindowsJoyCpl() {
+    await fetch('/api/open-joycpl', { method: 'POST' }).catch(() => {});
+    toast('ABRINDO CALIBRADOR NATIVO DO WINDOWS (JOY.CPL)… ⚙️');
+  }
+
+  function updateCalibrationModal() {
+    const modal = document.getElementById('cal-modal');
+    if (!modal.classList.contains('open')) return;
+    const c = latestControllers[calSelectedSlot];
+    if (!c) return;
+    const lx = c.connected ? (c.thumbLX / 32767) : 0;
+    const ly = c.connected ? -(c.thumbLY / 32767) : 0;
+    const rx = c.connected ? (c.thumbRX / 32767) : 0;
+    const ry = c.connected ? -(c.thumbRY / 32767) : 0;
+
+    document.getElementById('cal-dot-l').style.transform = `translate(calc(-50% + ${(lx * 72).toFixed(1)}px), calc(-50% + ${(ly * 72).toFixed(1)}px))`;
+    document.getElementById('cal-dot-r').style.transform = `translate(calc(-50% + ${(rx * 72).toFixed(1)}px), calc(-50% + ${(ry * 72).toFixed(1)}px))`;
+    document.getElementById('cal-txt-l').textContent = `X: ${Math.round(lx * 100)}% · Y: ${Math.round(-ly * 100)}%`;
+    document.getElementById('cal-txt-r').textContent = `X: ${Math.round(rx * 100)}% · Y: ${Math.round(-ry * 100)}%`;
   }
 
   let fails = 0;
@@ -655,49 +981,62 @@
     try {
       const r = await fetch('/api/status', { cache: 'no-store' });
       const d = await r.json();
-      d.controllers.forEach(c => cards[c.slot] && render(cards[c.slot], c));
-      const n = d.controllers.filter(c => c.connected).length;
+      latestControllers = d.controllers || [];
+      latestControllers.forEach(c => cards[c.slot] && render(cards[c.slot], c));
+      updateCalibrationModal();
+
+      if (Array.isArray(d.alerts) && d.alerts.length > 0) {
+        const lastAlert = d.alerts[d.alerts.length - 1];
+        showAlertPopup(lastAlert.title, lastAlert.message, lastAlert.level);
+      }
+
+      const n = latestControllers.filter(c => c.connected).length;
       document.getElementById('live-dot').classList.remove('off');
-      document.getElementById('live-text').textContent = n === 2 ? 'Dois controles ativos' : n === 1 ? 'Um controle ativo' : 'Salvo na memória (Standby)';
+      document.getElementById('live-text').textContent = n === 2 ? 'DOIS CONTROLES ATIVOS' : n === 1 ? 'UM CONTROLE ATIVO' : 'SALVO NA MEMÓRIA (STANDBY)';
       const asDot = document.getElementById('autostart-dot');
       const asTxt = document.getElementById('autostart-text');
       if (asDot && asTxt && typeof d.autoStart === 'boolean') {
         asDot.classList.toggle('off', !d.autoStart);
-        asTxt.textContent = d.autoStart ? '2º Plano + Auto-Start: Ativo' : '2º Plano Ativo (Auto-Start Off)';
+        asTxt.textContent = d.autoStart ? '2º PLANO + AUTO-START: ATIVO' : '2º PLANO ATIVO (AUTO-START OFF)';
       }
       fails = 0;
     } catch {
       if (++fails > 3) {
         document.getElementById('live-dot').classList.add('off');
-        document.getElementById('live-text').textContent = 'Serviço offline — abra o GameSirMonitor.exe';
+        document.getElementById('live-text').textContent = 'SERVIÇO OFFLINE — ABRA O GAMESIRBATTERYHUB.EXE';
       }
     }
   }
   tick();
-  setInterval(tick, 120);
+  setInterval(tick, 80);
 
   /* ---------- Actions ---------- */
   function toast(msg) {
     const t = document.getElementById('toast');
     t.textContent = msg; t.classList.add('show');
-    clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2200);
+    clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2600);
   }
   async function vibrate(slot) {
     const el = cards[slot].el;
     el.classList.add('vibrating');
     setTimeout(() => el.classList.remove('vibrating'), 650);
     fetch(`/api/vibrate?slot=${slot}`, { method: 'POST' }).catch(() => {});
-    toast(`Controle P${slot + 1} vibrando 📳`);
+    toast(`CONTROLE P${slot + 1} VIBRANDO 📳`);
+  }
+  async function toggleCharge(slot) {
+    await fetch(`/api/toggle-charge?slot=${slot}`, { method: 'POST' }).catch(() => {});
+    tick();
   }
   async function setBattery(slot, p) {
     await fetch(`/api/set-battery?slot=${slot}&percent=${p}`, { method: 'POST' }).catch(() => {});
-    toast(`P${slot + 1} ajustado para ${p}% (salvo em disco)`);
+    toast(`P${slot + 1} AJUSTADO PARA ${p}% (SALVO EM DISCO)`);
+    tick();
   }
   async function toggleAutoStart() {
     try {
       const r = await fetch('/api/toggle-autostart', { method: 'POST' });
       const d = await r.json();
-      toast(d.autoStart ? 'Iniciar com o Windows: ATIVADO ✅' : 'Iniciar com o Windows: DESATIVADO');
+      toast(d.autoStart ? 'INICIAR COM O WINDOWS: ATIVADO ✅' : 'INICIAR COM O WINDOWS: DESATIVADO');
       tick();
     } catch {}
   }
