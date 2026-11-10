@@ -248,17 +248,18 @@
   /* Live Analog Stick Overlays directly on the Controller Image */
   .stick-overlay {
     position: absolute;
-    width: 58px; height: 58px;
+    width: 56px; height: 56px;
     border-radius: 50%;
     transform: translate(-50%, -50%);
     border: 1.5px dashed color-mix(in srgb, var(--c1) 45%, transparent);
-    background: radial-gradient(circle, rgba(0,0,0,.25), transparent 70%);
+    background: radial-gradient(circle, rgba(0,0,0,.22), transparent 70%);
     pointer-events: none;
-    display: grid; place-items: center;
     transition: border-color .15s, box-shadow .15s;
   }
-  .stick-overlay.ls-pos { left: 26.2%; top: 39.5%; }
-  .stick-overlay.rs-pos { left: 61.2%; top: 56.5%; }
+  .player.p1 .stick-overlay.ls-pos { left: 22.8%; top: 31.2%; }
+  .player.p1 .stick-overlay.rs-pos { left: 61.2%; top: 51.5%; }
+  .player.p2 .stick-overlay.ls-pos { left: 23.0%; top: 32.8%; }
+  .player.p2 .stick-overlay.rs-pos { left: 61.2%; top: 52.2%; }
   .stick-overlay.deflected {
     border-style: solid;
     border-color: var(--c1);
@@ -269,12 +270,17 @@
     overflow: visible;
   }
   .stick-cap {
-    width: 24px; height: 24px; border-radius: 50%;
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 22px; height: 22px;
+    margin-left: -11px; margin-top: -11px;
+    border-radius: 50%;
     background: radial-gradient(circle at 35% 35%, var(--c1), var(--c2));
     border: 2px solid #fff;
     box-shadow: 0 0 12px var(--c1);
-    opacity: .42;
+    opacity: .65;
     transition: opacity .1s;
+    transform: translate(0px, 0px);
     will-change: transform;
   }
   .stick-overlay.deflected .stick-cap,
@@ -356,10 +362,12 @@
   .radar-circle::after { top: 50%; left: 2px; right: 2px; height: 1px; transform: translateY(-50%); }
   .radar-dot {
     position: absolute; left: 50%; top: 50%;
-    width: 8px; height: 8px; border-radius: 50%;
+    width: 8px; height: 8px;
+    margin-left: -4px; margin-top: -4px;
+    border-radius: 50%;
     background: var(--c1);
     box-shadow: 0 0 8px var(--c1);
-    transform: translate(-50%, -50%);
+    transform: translate(0px, 0px);
     will-change: transform;
   }
   .radar-meta { font-size: 10px; line-height: 1.25; color: var(--txt-2); min-width: 52px; }
@@ -481,8 +489,9 @@
   .cal-canvas::after { top: 50%; left: 0; right: 0; height: 1px; }
   .cal-dot {
     position: absolute; left: 50%; top: 50%; width: 14px; height: 14px;
+    margin-left: -7px; margin-top: -7px;
     border-radius: 50%; background: var(--p1); border: 2px solid #fff;
-    transform: translate(-50%, -50%); box-shadow: 0 0 12px var(--p1);
+    transform: translate(0px, 0px); box-shadow: 0 0 12px var(--p1);
   }
 
   /* Toast */
@@ -519,7 +528,6 @@
       </div>
       <div>
         <h1>GAMESIR BATTERY HUB</h1>
-        <p>MONITORAMENTO DUPLO EM TEMPO REAL · P1 &amp; P2</p>
       </div>
     </div>
     <div class="top-right">
@@ -624,17 +632,13 @@
       </div>
       <div class="level-badge"><span class="lvl-t">—</span></div>
     </div>
-    <div class="retro-line">
-      <span>REMAINING BATTERY: <strong class="pct-inline">--%</strong></span>
-      <span class="charge-eta" style="color:var(--ok)"></span>
-    </div>
     <div class="bars"><span></span><span></span><span></span><span></span></div>
 
     <div class="stats">
-      <div class="stat"><div class="stat-k">AUTONOMIA</div><div class="stat-v s-auto">—</div><div class="stat-sub s-mah">600 / 600 MAH</div></div>
-      <div class="stat"><div class="stat-k">CONSUMO / CARGA</div><div class="stat-v s-draw">—</div><div class="stat-sub s-mode">AGUARDANDO</div></div>
-      <div class="stat"><div class="stat-k">TEMPO EM USO</div><div class="stat-v s-sess">—</div><div class="stat-sub s-sess-sub">SÓ CONTA JOGANDO</div></div>
-      <div class="stat"><div class="stat-k">INATIVIDADE</div><div class="stat-v s-idle">—</div><div class="stat-sub s-trig">LT 0% · RT 0%</div></div>
+      <div class="stat"><div class="stat-k">AUTONOMIA</div><div class="stat-v s-auto">—</div></div>
+      <div class="stat"><div class="stat-k">TEMPO EM USO</div><div class="stat-v s-sess">—</div></div>
+      <div class="stat"><div class="stat-k">INATIVIDADE</div><div class="stat-v s-idle">—</div></div>
+      <div class="stat"><div class="stat-k">GATILHOS</div><div class="stat-v s-trig">LT 0% · RT 0%</div></div>
     </div>
 
     <div class="telemetry-bar">
@@ -663,9 +667,6 @@
       <button class="btn primary b-vib">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M3 8v8M21 8v8"/></svg>
         VIBRAR
-      </button>
-      <button class="btn b-charge" title="Ative quando conectar o controle no cabo USB-C para acompanhar a recarga e receber avisos em 80% e 100%">
-        ⚡ CARREGANDO
       </button>
       <button class="btn b-joycpl" title="Abrir calibração e diagnóstico deste controle">
         🎯 CALIBRAR
@@ -728,7 +729,6 @@
     img.src = `/img/p${slot + 1}.png`;
 
     el.querySelector('.b-vib').onclick = () => vibrate(slot);
-    el.querySelector('.b-charge').onclick = () => toggleCharge(slot);
     el.querySelector('.b-joycpl').onclick = () => openCalibrationModal(slot);
 
     const menu = el.querySelector('.menu');
@@ -749,19 +749,13 @@
       nameEl: el.querySelector('.p-name'),
       subEl: el.querySelector('.p-sub'),
       pct: el.querySelector('.pct'),
-      pctInline: el.querySelector('.pct-inline'),
-      chargeEta: el.querySelector('.charge-eta'),
       lvl: el.querySelector('.level-badge'),
       lvlT: el.querySelector('.lvl-t'),
       bars: el.querySelectorAll('.bars span'),
       status: el.querySelector('.status'),
       statusT: el.querySelector('.status-t'),
       auto: el.querySelector('.s-auto'),
-      mah: el.querySelector('.s-mah'),
-      draw: el.querySelector('.s-draw'),
-      mode: el.querySelector('.s-mode'),
       sess: el.querySelector('.s-sess'),
-      sessSub: el.querySelector('.s-sess-sub'),
       idle: el.querySelector('.s-idle'),
       trig: el.querySelector('.s-trig'),
       lsOverlay, rsOverlay,
@@ -775,7 +769,6 @@
       rTxtR: el.querySelector('.r-txt-r'),
       keys: Object.fromEntries([...el.querySelectorAll('.key')].map(k => [k.dataset.k, k])),
       vib: el.querySelector('.b-vib'),
-      chargeBtn: el.querySelector('.b-charge'),
       shownPct: -1,
       activeUntil: 0
     };
@@ -784,7 +777,7 @@
 
   /* ---------- Render ---------- */
   function levelInfo(pct, isCharging) {
-    if (isCharging) return ['⚡ CARREGANDO', '#4ade80', Math.max(1, Math.ceil(pct / 25))];
+    if (isCharging) return [`⚡ CARREGANDO (${pct}%)`, '#4ade80', Math.max(1, Math.ceil(pct / 25))];
     if (pct >= 70) return ['CARGA ALTA', 'var(--ok)', 4];
     if (pct >= 45) return ['CARGA MÉDIA', 'var(--ok)', 3];
     if (pct >= 16) return ['CARGA BAIXA', 'var(--warn)', 2];
@@ -794,25 +787,18 @@
     const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = Math.floor(sec % 60);
     return h ? `${h}H ${String(m).padStart(2,'0')}M` : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
   }
-  function animateNumber(card, target, exactVal) {
-    const fmt = (v) => {
-      if (v >= 99.95) return '100';
-      return v.toFixed(1).replace('.', ',');
-    };
-    if (card.shownPct < 0) {
-      card.shownPct = exactVal;
-      card.pct.textContent = fmt(exactVal);
-      return;
-    }
-    if (Math.abs(card.shownPct - exactVal) < 0.05) {
-      card.pct.textContent = fmt(exactVal);
+  function animateNumber(card, target) {
+    const fmt = (v) => String(Math.min(100, Math.max(0, Math.round(v))));
+    if (card.shownPct < 0 || Math.abs(card.shownPct - target) < 1) {
+      card.shownPct = target;
+      card.pct.textContent = fmt(target);
       return;
     }
     const from = card.shownPct, t0 = performance.now();
-    card.shownPct = exactVal;
+    card.shownPct = target;
     const step = (t) => {
-      const k = Math.min(1, (t - t0) / 500), e = 1 - Math.pow(1 - k, 3);
-      const cur = from + (exactVal - from) * e;
+      const k = Math.min(1, (t - t0) / 400), e = 1 - Math.pow(1 - k, 3);
+      const cur = from + (target - from) * e;
       card.pct.textContent = fmt(cur);
       if (k < 1) requestAnimationFrame(step);
     };
@@ -828,9 +814,9 @@
     const lMag = Math.hypot(lx, ly);
     const rMag = Math.hypot(rx, ry);
 
-    // Move caps on controller image (radius up to 18px)
-    const lDx = (lx * 18).toFixed(1), lDy = (ly * 18).toFixed(1);
-    const rDx = (rx * 18).toFixed(1), rDy = (ry * 18).toFixed(1);
+    // Move caps on controller image (radius up to 16px from exact center)
+    const lDx = (lx * 16).toFixed(1), lDy = (ly * 16).toFixed(1);
+    const rDx = (rx * 16).toFixed(1), rDy = (ry * 16).toFixed(1);
     card.lsCap.style.transform = `translate(${lDx}px, ${lDy}px)`;
     card.rsCap.style.transform = `translate(${rDx}px, ${rDy}px)`;
 
@@ -844,9 +830,9 @@
     card.lsOverlay.classList.toggle('pressed', on && (c.buttons & 0x0040) !== 0);
     card.rsOverlay.classList.toggle('pressed', on && (c.buttons & 0x0080) !== 0);
 
-    // Update 2D Mini Radar
-    card.rDotL.style.transform = `translate(calc(-50% + ${(lx * 12).toFixed(1)}px), calc(-50% + ${(ly * 12).toFixed(1)}px))`;
-    card.rDotR.style.transform = `translate(calc(-50% + ${(rx * 12).toFixed(1)}px), calc(-50% + ${(ry * 12).toFixed(1)}px))`;
+    // Update 2D Mini Radar (centered at 50%/50% via margin-left/top -4px)
+    card.rDotL.style.transform = `translate(${(lx * 11).toFixed(1)}px, ${(ly * 11).toFixed(1)}px)`;
+    card.rDotR.style.transform = `translate(${(rx * 11).toFixed(1)}px, ${(ry * 11).toFixed(1)}px)`;
     card.rTxtL.textContent = `${Math.round(lx * 100)}% · ${Math.round(-ly * 100)}%`;
     card.rTxtR.textContent = `${Math.round(rx * 100)}% · ${Math.round(-ry * 100)}%`;
   }
@@ -859,6 +845,9 @@
       Math.abs(c.thumbLX) > 5000 || Math.abs(c.thumbLY) > 5000 || Math.abs(c.thumbRX) > 5000 || Math.abs(c.thumbRY) > 5000;
     if (on && moving) card.activeUntil = now + 350;
 
+    const exactPct = typeof c.batteryPercentExact === 'number' ? c.batteryPercentExact : (c.batteryPercent ?? 100);
+    const pct = c.batteryPercent ?? Math.floor(exactPct);
+
     const state = c.activityState || (on ? 'EM USO' : 'DESLIGADO');
     const isResting = on && !isCharging && state === 'Em Repouso';
     const isSleeping = on && !isCharging && state === 'Hibernando';
@@ -867,50 +856,30 @@
     card.el.classList.toggle('charging', isCharging);
     card.el.classList.toggle('active', on && now < card.activeUntil);
     card.status.className = 'status' + (isCharging ? ' charging' : !on ? ' off' : isSleeping ? ' sleeping' : isResting ? ' resting' : '');
-    card.statusT.textContent = isCharging ? '⚡ CARREGANDO' : !on ? 'DESLIGADO (SALVO)' : isSleeping ? 'HIBERNANDO (0 MA)' : isResting ? 'EM REPOUSO' : state;
+    card.statusT.textContent = isCharging ? `⚡ CARREGANDO · ${pct}%` : !on ? 'DESLIGADO' : isSleeping ? 'HIBERNANDO' : isResting ? 'EM REPOUSO' : state;
     card.vib.disabled = !on;
-    card.chargeBtn.classList.toggle('charge-active', isCharging);
-    card.chargeBtn.textContent = isCharging ? '⚡ PARAR CARGA' : '⚡ CARREGANDO';
 
     if (c.modelName) card.nameEl.textContent = c.modelName;
     if (c.connectionSubtitle) card.subEl.textContent = c.connectionSubtitle;
 
-    const exactPct = typeof c.batteryPercentExact === 'number' ? c.batteryPercentExact : (c.batteryPercent ?? 100);
-    const pct = c.batteryPercent ?? Math.floor(exactPct);
     const [label, color, cells] = levelInfo(pct, isCharging);
     card.el.style.setProperty('--lvl', (on || isCharging) ? color : 'var(--txt-2)');
-    card.lvlT.textContent = (on || isCharging) ? label : `${label} (ÚLTIMO ESTADO)`;
+    card.lvlT.textContent = (on || isCharging) ? label : `${label} (SALVO)`;
     card.bars.forEach((b, i) => b.classList.toggle('on', i < cells));
     card.seg.style.strokeDashoffset = CIRC * (1 - exactPct / 100);
 
-    animateNumber(card, pct, exactPct);
-    const fmtPct = (exactPct >= 99.95 ? '100' : exactPct.toFixed(1).replace('.', ',')) + '%';
-    if (card.pctInline) card.pctInline.textContent = fmtPct;
+    animateNumber(card, pct);
 
     const remMah = c.remainingMah ?? Math.round((exactPct / 100) * 600);
-    if (isCharging) {
-      const missingMah = Math.max(0, 600 - remMah);
-      const minsToFull = Math.ceil((missingMah / 260) * 60);
-      card.chargeEta.textContent = minsToFull > 0 ? `⚡ +${c.currentDrawMa} MA · ~${minsToFull} MIN ATÉ 100%` : '⚡ 100% COMPLETO';
-    } else {
-      card.chargeEta.textContent = '';
-    }
-
     const estPlayHrs = remMah / 75;
-    card.auto.textContent = `~${Math.floor(estPlayHrs)}H ${String(Math.round((estPlayHrs % 1) * 60)).padStart(2,'0')}M`;
-    card.mah.textContent = `${remMah} / 600 MAH`;
-
-    const ma = (on || isCharging) ? (c.currentDrawMa ?? 11) : 0;
-    card.draw.textContent = isCharging ? `+${ma} MA` : `${ma} MA`;
-    card.mode.textContent = isCharging ? 'RECARGA USB-C' : !on ? 'DESLIGADO (0%/H)' : isSleeping ? 'AUTO-SLEEP (0%/H)' : isResting ? 'STANDBY (~1.8%/H)' : 'JOGANDO (~12%/H)';
+    card.auto.textContent = `${Math.floor(estPlayHrs)}H ${String(Math.round((estPlayHrs % 1) * 60)).padStart(2,'0')}M`;
 
     card.sess.textContent = fmtTime(c.sessionSeconds || 0);
-    card.sessSub.textContent = isCharging ? 'RECARREGANDO' : !on ? 'SALVO NA MEMÓRIA' : (isResting || isSleeping) ? 'PAUSADO (PARADO)' : 'CONTANDO EM USO';
 
     const idleSec = c.idleSeconds || 0;
-    card.idle.textContent = !on ? 'CONTROLE OFF' : idleSec < 12 ? 'ATIVO AGORA' : fmtTime(idleSec);
+    card.idle.textContent = !on ? 'OFF' : idleSec < 12 ? 'ATIVO' : fmtTime(idleSec);
     const lt = Math.round(c.leftTrigger / 2.55), rt = Math.round(c.rightTrigger / 2.55);
-    card.trig.textContent = on ? `LT ${lt}% · RT ${rt}%` : 'SEM CONSUMO (0 MA)';
+    card.trig.textContent = on ? `LT ${lt}% · RT ${rt}%` : 'LT 0% · RT 0%';
 
     updateStickVisuals(card, c, on);
 
@@ -970,8 +939,8 @@
     const rx = c.connected ? (c.thumbRX / 32767) : 0;
     const ry = c.connected ? -(c.thumbRY / 32767) : 0;
 
-    document.getElementById('cal-dot-l').style.transform = `translate(calc(-50% + ${(lx * 72).toFixed(1)}px), calc(-50% + ${(ly * 72).toFixed(1)}px))`;
-    document.getElementById('cal-dot-r').style.transform = `translate(calc(-50% + ${(rx * 72).toFixed(1)}px), calc(-50% + ${(ry * 72).toFixed(1)}px))`;
+    document.getElementById('cal-dot-l').style.transform = `translate(${(lx * 72).toFixed(1)}px, ${(ly * 72).toFixed(1)}px)`;
+    document.getElementById('cal-dot-r').style.transform = `translate(${(rx * 72).toFixed(1)}px, ${(ry * 72).toFixed(1)}px)`;
     document.getElementById('cal-txt-l').textContent = `X: ${Math.round(lx * 100)}% · Y: ${Math.round(-ly * 100)}%`;
     document.getElementById('cal-txt-r').textContent = `X: ${Math.round(rx * 100)}% · Y: ${Math.round(-ry * 100)}%`;
   }

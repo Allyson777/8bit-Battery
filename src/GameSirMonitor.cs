@@ -200,8 +200,12 @@ namespace GameSirBatteryMonitor
         [DllImport("setupapi.dll")]
         static extern bool SetupDiDestroyDeviceInfoList(IntPtr s);
 
+        [DllImport("hid.dll", SetLastError = true)]
+        static extern void HidD_GetHidGuid(out Guid hidGuid);
+
         static readonly ControllerStateData[] _ctl = new ControllerStateData[2];
         static int _dongles = 0;
+        static int _usbChargingCables = 0;
         static string _detectedModel = "GameSir Controller";
         static string _detectedTransport = "Receptor 2.4GHz";
         static readonly object _lock = new object();
@@ -429,8 +433,8 @@ namespace GameSirBatteryMonitor
                 p1 = (int)Math.Floor(_ctl[1].EstimatedPercent + 0.001);
                 c0 = _ctl[0].Connected || _ctl[0].IsCharging;
                 c1 = _ctl[1].Connected || _ctl[1].IsCharging;
-                s0 = _ctl[0].EstimatedPercent.ToString("F1", CultureInfo.InvariantCulture) + "% (" + _ctl[0].ActivityState + ")";
-                s1 = _ctl[1].EstimatedPercent.ToString("F1", CultureInfo.InvariantCulture) + "% (" + _ctl[1].ActivityState + ")";
+                s0 = p0 + "% (" + _ctl[0].ActivityState + ")";
+                s1 = p1 + "% (" + _ctl[1].ActivityState + ")";
             }
             string txt = "P1: " + s0 + " | P2: " + s1;
             if (txt.Length > 63) txt = txt.Substring(0, 63);
@@ -528,9 +532,44 @@ namespace GameSirBatteryMonitor
                 finally { SetupDiDestroyDeviceInfoList(set); }
             }
 
+            int usbChargeCount = 0;
+            Guid hidGuid;
+            HidD_GetHidGuid(out hidGuid);
+            IntPtr hidSet = SetupDiGetClassDevs(ref hidGuid, IntPtr.Zero, IntPtr.Zero, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+            if (hidSet != IntPtr.Zero && hidSet != new IntPtr(-1))
+            {
+                try
+                {
+                    SP_DEVICE_INTERFACE_DATA d = new SP_DEVICE_INTERFACE_DATA();
+                    d.cbSize = Marshal.SizeOf(d);
+                    for (uint i = 0; SetupDiEnumDeviceInterfaces(hidSet, IntPtr.Zero, ref hidGuid, i, ref d); i++)
+                    {
+                        SP_DEVICE_INTERFACE_DETAIL_DATA det = new SP_DEVICE_INTERFACE_DETAIL_DATA();
+                        det.cbSize = IntPtr.Size == 8 ? 8 : 6;
+                        int req;
+                        if (SetupDiGetDeviceInterfaceDetail(hidSet, ref d, ref det, Marshal.SizeOf(det), out req, IntPtr.Zero)
+                            && det.DevicePath != null)
+                        {
+                            string hp = det.DevicePath.ToLowerInvariant();
+                            // VID_3537&PID_2106 enumerates when the GameSir Nova Lite is plugged into the PC via USB-C cable
+                            if (hp.Contains("vid_3537&pid_2106"))
+                            {
+                                usbChargeCount++;
+                            }
+                        }
+                    }
+                }
+                finally { SetupDiDestroyDeviceInfoList(hidSet); }
+            }
+            if (gamesirCount > 2)
+            {
+                usbChargeCount = Math.Max(usbChargeCount, gamesirCount - 2);
+            }
+
             lock (_lock)
             {
                 _dongles = gamesirCount > 0 ? gamesirCount : totalXusb;
+                _usbChargingCables = usbChargeCount;
                 _detectedModel = model ?? "GameSir Controller";
                 _detectedTransport = transport ?? "XInput Wireless";
             }
@@ -600,8 +639,9 @@ namespace GameSirBatteryMonitor
                 if (!c.NotifiedLow15 && newPct <= 15.0)
                 {
                     c.NotifiedLow15 = true;
-                    PushNotification("⚠️ BATERIA FRACA — " + pTag + " (" + newPct.ToString("F1", CultureInfo.InvariantCulture) + "%)",
-                        "A bateria do " + pTag + " está abaixo de 15%! Conecte o cabo USB-C e ative o modo Carregando.",
+                    int pctInt = (int)Math.Floor(newPct + 0.001);
+                    PushNotification("⚠️ BATERIA FRACA — " + pTag + " (" + pctInt + "%)",
+                        "A bateria do " + pTag + " está abaixo de 15%! Conecte o cabo USB-C para recarregar.",
                         ToolTipIcon.Warning);
                 }
                 else if (newPct > 18.0)
@@ -660,6 +700,44 @@ namespace GameSirBatteryMonitor
 
                     lock (_lock)
                     {
+                        // Auto-detect USB charging cable connection per controller
+                        // If a USB-C cable (PID_2106 or extra wired endpoint) is detected on the PC:
+                        // assign charging to a disconnected slot first (since plugging in USB-C disconnects 2.4G wireless),
+                        // or to the controller with lower battery if both are active.
+                        if (_usbChargingCables >= 2)
+                        {
+                            _ctl[0].IsCharging = true;
+                            _ctl[1].IsCharging = true;
+                        }
+                        else if (_usbChargingCables == 1)
+                        {
+                            if (!slotConnected[targetSlots[0]] && slotConnected[targetSlots[1]])
+                            {
+                                _ctl[0].IsCharging = true;
+                                _ctl[1].IsCharging = false;
+                            }
+                            else if (!slotConnected[targetSlots[1]] && slotConnected[targetSlots[0]])
+                            {
+                                _ctl[0].IsCharging = false;
+                                _ctl[1].IsCharging = true;
+                            }
+                            else if (_ctl[0].RemainingMah <= _ctl[1].RemainingMah)
+                            {
+                                _ctl[0].IsCharging = true;
+                                _ctl[1].IsCharging = false;
+                            }
+                            else
+                            {
+                                _ctl[0].IsCharging = false;
+                                _ctl[1].IsCharging = true;
+                            }
+                        }
+                        else
+                        {
+                            _ctl[0].IsCharging = false;
+                            _ctl[1].IsCharging = false;
+                        }
+
                         for (int i = 0; i < 2; i++)
                         {
                             ControllerStateData c = _ctl[i];
